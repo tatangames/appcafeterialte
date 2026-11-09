@@ -68,6 +68,21 @@ export function SesionProvider({ children }: { children: ReactNode }) {
       if (c) setCajaId(Number(c));
       if (s && t) {
         configurarApi({ token: t });
+        // Con la copia guardada la app abre de inmediato; el servidor confirma permisos por detrás
+        // (si la sesión venció, la API avisa y se vuelve al inicio de sesión)
+        const copia = await leerJson<Usuario>(USUARIO);
+        if (copia) {
+          setUsuario(copia);
+          if (b && Number(b) === copia.id) setBloqueada(true);
+          setListo(true);
+          getMe()
+            .then((yo) => {
+              setUsuario(yo);
+              recordarUsuario(yo);
+            })
+            .catch(() => null);
+          return;
+        }
         try {
           const yo = await getMe();
           setUsuario(yo);
