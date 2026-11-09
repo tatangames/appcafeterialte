@@ -96,31 +96,51 @@ export default function TerminalMesa() {
     }
   }, [terminalId, aplicar]);
 
+  // Existencias de las tarjetas: cambian con cada producto agregado (aquí o en otra mesa/tablet)
+  const cargarCatalogo = useCallback(() => {
+    srv.getCatalogoMesas().then((c) => { catalogoGuardado = c; setCatalogo(c); }).catch(() => null);
+  }, []);
+  // Tras agregar o quitar se vuelve a pedir, una sola vez aunque toquen varias veces seguidas
+  const esperaCatalogo = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const refrescarCatalogo = useCallback(() => {
+    if (esperaCatalogo.current) clearTimeout(esperaCatalogo.current);
+    esperaCatalogo.current = setTimeout(cargarCatalogo, 600);
+  }, [cargarCatalogo]);
+
   useFocusEffect(useCallback(() => {
     cargar();
-    // Otro dispositivo puede agregar o cobrar en la misma mesa
-    const intervalo = setInterval(() => { if (!document_oculto()) cargar(); }, 20000);
+    // Otro dispositivo puede agregar o cobrar en la misma mesa, o vender lo que queda
+    const intervalo = setInterval(() => { if (!document_oculto()) { cargar(); cargarCatalogo(); } }, 20000);
     return () => clearInterval(intervalo);
-  }, [cargar]));
+  }, [cargar, cargarCatalogo]));
 
   useEffect(() => {
-    srv.getCatalogoMesas().then((c) => { catalogoGuardado = c; setCatalogo(c); }).catch(() => null);
+    cargarCatalogo();
     srv.getCatalogosCaja().then((c) => { metodosGuardados = c.metodos_pago; setMetodos(c.metodos_pago); }).catch(() => null);
     const t = setInterval(() => setAhora(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, []);
+    return () => {
+      clearInterval(t);
+      if (esperaCatalogo.current) clearTimeout(esperaCatalogo.current);
+    };
+  }, [cargarCatalogo]);
 
   /** Corre una acción sobre la orden y aplica la orden que devuelve. */
   const hacer = async <T extends { orden?: Orden; message?: string }>(accion: () => Promise<T | null>, aviso?: boolean): Promise<T | null> => {
     setOcupado(true);
     try {
       const res = await accion();
-      if (res?.orden) aplicar(res.orden);
+      if (res?.orden) {
+        aplicar(res.orden);
+        refrescarCatalogo();
+      }
       if (aviso && res?.message) avisar(res.message);
       return res;
     } catch (e) {
       avisar('No se pudo completar', mensajeError(e));
-      if (e instanceof ApiError && e.estado === 422) cargar();
+      if (e instanceof ApiError && e.estado === 422) {
+        cargar();
+        cargarCatalogo();
+      }
       return null;
     } finally {
       setOcupado(false);
@@ -143,6 +163,11 @@ export default function TerminalMesa() {
     setConExtras(null);
     const res = await hacer(() => srv.agregarItems(orden.id, [item], ticketId));
     if (!res) return;
+    // La tarjeta baja de inmediato; el catálogo del servidor lo confirma en un momento
+    setCatalogo((c) => c && {
+      ...c,
+      productos: c.productos.map((p) => (p.id === item.producto_id && p.disponible != null ? { ...p, disponible: p.disponible - item.cantidad } : p)),
+    });
     const nombre = catalogo?.productos.find((p) => p.id === item.producto_id)?.nombre ?? 'Producto';
     const cuenta = res.orden?.tickets.find((t) => t.id === ticketId)?.nombre ?? 'la cuenta';
     if (avisoAgregado.current) clearTimeout(avisoAgregado.current);
