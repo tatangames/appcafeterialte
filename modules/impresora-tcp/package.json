@@ -1,0 +1,7 @@
+{
+  "name": "impresora-tcp",
+  "version": "1.0.0",
+  "description": "Manda bytes crudos (ESC/POS o Star raster) a una impresora de red por TCP",
+  "main": "index.ts",
+  "private": true
+}

@@ -1,18 +1,67 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
+import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useColorScheme } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
+import { AppState } from 'react-native';
 
-import { AnimatedSplashOverlay } from '@/components/animated-icon';
-import AppTabs from '@/components/app-tabs';
+import { AutorizacionGlobal } from '@/components/autorizacion';
+import { PantallaBloqueo } from '@/components/bloqueo';
+import { C } from '@/constants/colores';
+import { alEscribir } from '@/lib/api';
+import { ConexionProvider } from '@/lib/conexion';
+import { cargarImpresionLocal, procesarCola } from '@/lib/impresionLocal';
+import { SesionProvider, useSesion } from '@/lib/sesion';
 
 SplashScreen.preventAutoHideAsync();
 
-export default function TabLayout() {
-  const colorScheme = useColorScheme();
+function Navegacion() {
+  const { listo } = useSesion();
+
+  // La pantalla de inicio se quita cuando ya se leyó la sesión guardada
+  useEffect(() => {
+    if (listo) SplashScreen.hideAsync();
+  }, [listo]);
+
+  if (!listo) return null;
+
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AnimatedSplashOverlay />
-      <AppTabs />
-    </ThemeProvider>
+    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: C.fondo } }} />
+  );
+}
+
+// La tablet que imprime revisa la cola cada 3 s y justo después de cada acción
+function ImpresionLocal() {
+  const { usuario } = useSesion();
+  const conSesion = !!usuario;
+
+  useEffect(() => {
+    if (!conSesion) return;
+    let vivo = true;
+    cargarImpresionLocal().then(() => { if (vivo) procesarCola(); });
+    alEscribir(() => setTimeout(procesarCola, 300));
+    const ciclo = setInterval(() => {
+      if (AppState.currentState === 'active') procesarCola();
+    }, 3000);
+    return () => {
+      vivo = false;
+      clearInterval(ciclo);
+      alEscribir(null);
+    };
+  }, [conSesion]);
+
+  return null;
+}
+
+export default function RootLayout() {
+  return (
+    <SesionProvider>
+      <ConexionProvider>
+        <StatusBar style="dark" />
+        <Navegacion />
+        <ImpresionLocal />
+        <AutorizacionGlobal />
+        <PantallaBloqueo />
+      </ConexionProvider>
+    </SesionProvider>
   );
 }
