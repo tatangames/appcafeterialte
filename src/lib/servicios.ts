@@ -12,6 +12,9 @@ export const getMe = () => api.get<Usuario>('/me');
 
 // Bloqueo de pantalla y PIN propio
 export const desbloquearPantalla = (codigo: string) => api.post<{ success: number }>('/me/desbloquear', { codigo });
+// Tablet bloqueada: el PIN de cualquiera abre su sesión (cambio = false si es la misma persona)
+export const cambiarUsuarioConPin = (pin: string) =>
+  api.post<{ success: number; cambio: boolean; usuario_id: number; token?: string }>('/me/cambiar-usuario', { pin });
 export const cambiarMiPin = (datos: { password_actual: string; pin: string; pin_confirmation: string }) =>
   api.put<{ success: number; message: string; pin_actualizado_at: string }>('/me/pin', datos);
 

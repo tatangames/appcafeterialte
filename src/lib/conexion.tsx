@@ -48,7 +48,7 @@ interface Conexion {
   sincronizando: boolean;
   activo: boolean;                         // el usuario vende (pos.vender)
   encolar: (venta: VentaEnCola) => Promise<void>;
-  sincronizar: () => Promise<void>;
+  sincronizar: () => Promise<number>;      // devuelve cuántas ventas siguen pendientes de enviar
   reportarErrorDeRed: () => void;          // una petición falló por red: pasar a «sin conexión»
 }
 
@@ -100,8 +100,10 @@ export function ConexionProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => { leerCola().then(setCola).catch(() => null); }, [leerCola]);
 
-  const sincronizar = useCallback(async () => {
-    if (enCurso.current || !activo) return;
+  const pendientes = useCallback(async () => (await leerCola()).filter((v) => v.estado === 'pendiente').length, [leerCola]);
+
+  const sincronizar = useCallback(async (): Promise<number> => {
+    if (enCurso.current || !activo) return pendientes();
     enCurso.current = true;
     setSincronizando(true);
     let creadas = 0;
@@ -141,7 +143,8 @@ export function ConexionProvider({ children }: { children: ReactNode }) {
       enCurso.current = false;
       setSincronizando(false);
     }
-  }, [activo, leerCola, modificarCola]);
+    return pendientes();
+  }, [activo, leerCola, modificarCola, pendientes]);
 
   const encolar = useCallback(
     (venta: VentaEnCola) => modificarCola((items) => [...items.filter((v) => v.uuid !== venta.uuid), venta]),

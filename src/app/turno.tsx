@@ -27,13 +27,8 @@ function Tarjeta({ titulo, valor, color = C.texto, ancho }: { titulo: string; va
 
 // Turno de la caja de esta tablet: movimientos, corte, cierre y cambio de turno
 export default function Turno() {
-  const { cajaId, puede, usuario, salir } = useSesion();
+  const { cajaId, puede, usuario, bloquear } = useSesion();
   const { cola, enLinea, sincronizar } = useConexion();
-  const cerrarSesion = async () => {
-    if (cola.length && !(await confirmar('Ventas sin enviar', `Hay ${cola.length} venta(s) hechas sin conexión que aún no llegan al servidor. Siguen guardadas en esta tablet y se envían cuando alguien vuelva a entrar con conexión.`, 'Salir igual'))) return;
-    await salir();
-    router.replace('/login');
-  };
   const { width } = useWindowDimensions();
   const [datos, setDatos] = useState<Datos | null>(null);
   const [ocupado, setOcupado] = useState(false);
@@ -151,7 +146,7 @@ export default function Turno() {
       setContadoTexto('');
       setObs('');
       await imprimirCorte(res.turno.id, false);
-      // Cerrado el turno se cierra la sesión: el siguiente turno lo abre quien entre con su usuario (otro o el mismo)
+      // Cerrado el turno se bloquea la tablet: el siguiente turno lo abre quien entre con su PIN (otro o el mismo)
       const d = res.turno.diferencia ?? 0;
       const cuadre = Math.abs(d) < 0.005 ? 'La caja cuadra' : d < 0 ? `Faltan ${dinero(Math.abs(d))}` : `Sobran ${dinero(d)}`;
       if (ajeno) {
@@ -160,8 +155,9 @@ export default function Turno() {
         router.replace('/caja');
         return;
       }
-      avisar('Turno cerrado', `${cuadre}. Se cerró la sesión de ${usuario?.nombre}: para abrir el siguiente turno, entra con tu usuario.`);
-      await cerrarSesion();
+      avisar('Turno cerrado', `${cuadre}. La tablet quedó bloqueada: quien abra el siguiente turno entra con su PIN.`);
+      router.replace('/inicio');
+      await bloquear();
     } catch (err) {
       avisar('No se pudo cerrar el turno', mensajeError(err));
     } finally {

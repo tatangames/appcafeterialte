@@ -3,7 +3,7 @@ import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, 
 
 import { borrarJson, guardarJson, leerJson } from './almacenLocal';
 import { ApiError, configurarApi, normalizarServidor } from './api';
-import { cerrarSesion, desbloquearPantalla, getMe, iniciarSesion } from './servicios';
+import { cambiarUsuarioConPin, cerrarSesion, desbloquearPantalla, getMe, iniciarSesion } from './servicios';
 import { borrar, guardar, leer } from './storage';
 import { Usuario } from './tipos';
 
@@ -18,9 +18,10 @@ interface Sesion {
   fijarCaja: (id: number | null) => Promise<void>;
   puede: (permiso: string) => boolean;
   refrescarUsuario: () => Promise<void>; // vuelve a leer roles y permisos (el admin pudo cambiarlos)
-  bloqueada: boolean;                     // pantalla tapada hasta que el mismo usuario ponga su PIN
+  bloqueada: boolean;                     // pantalla tapada hasta que alguien ponga su PIN
   bloquear: () => Promise<void>;
-  desbloquear: (codigo: string) => Promise<void>;
+  // Con PIN entra quien sea su dueño (devuelve true si cambió de persona); con contraseña, el mismo usuario
+  desbloquear: (codigo: string, conContrasena: boolean) => Promise<boolean>;
 }
 
 const Contexto = createContext<Sesion | null>(null);
@@ -131,12 +132,30 @@ export function SesionProvider({ children }: { children: ReactNode }) {
     await guardar(K.bloqueo, String(usuario.id));
   }, [usuario]);
 
-  // El servidor revisa el PIN (o la contraseña); si falla, lanza el error con el mensaje
-  const desbloquear = useCallback(async (codigo: string) => {
-    await desbloquearPantalla(codigo);
+  // El servidor revisa el PIN (o la contraseña); si falla, lanza el error con el mensaje.
+  // Un PIN de otra persona cierra la sesión anterior y abre la suya (una tablet, varios meseros)
+  const desbloquear = useCallback(async (codigo: string, conContrasena: boolean) => {
+    let cambio = false;
+    if (conContrasena) {
+      await desbloquearPantalla(codigo);
+    } else {
+      const r = await cambiarUsuarioConPin(codigo);
+      if (r.token) {
+        configurarApi({ token: r.token });
+        await guardar(K.token, r.token);
+      }
+      // También si el cambio se hizo pero no se alcanzó a leer el usuario (reintento con el mismo PIN)
+      if (r.usuario_id !== usuario?.id) {
+        const yo = await getMe();
+        setUsuario(yo);
+        recordarUsuario(yo);
+        cambio = true;
+      }
+    }
     setBloqueada(false);
     await borrar(K.bloqueo);
-  }, []);
+    return cambio;
+  }, [usuario?.id]);
 
   // El rol admin tiene acceso total
   const puede = useCallback(

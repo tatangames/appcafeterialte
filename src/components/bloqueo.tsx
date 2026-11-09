@@ -1,17 +1,19 @@
 // Bloqueo de pantalla de la tablet y el PIN propio de cada usuario
 import { useEffect, useState } from 'react';
+import { router } from 'expo-router';
 import { Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Boton, Campo, Teclado, Ventana } from '@/components/ui';
 import { C } from '@/constants/colores';
 import { ApiError } from '@/lib/api';
 import { avisar } from '@/lib/aviso';
+import { useConexion } from '@/lib/conexion';
 import { useSesion } from '@/lib/sesion';
-import { cambiarMiPin, getMe } from '@/lib/servicios';
+import { cambiarMiPin } from '@/lib/servicios';
 
 const mensaje = (e: unknown, porDefecto: string) => (e instanceof Error && e.message ? e.message : porDefecto);
 
-/** Botón "Bloquear": al ir al baño o dejar la tablet, nadie la usa sin tu PIN. */
+/** Botón "Bloquear": dejas la tablet y el siguiente mesero entra con su PIN (o tú vuelves con el tuyo). */
 export function BotonBloquear() {
   const { usuario, bloquear } = useSesion();
   if (!usuario) return null;
@@ -19,8 +21,9 @@ export function BotonBloquear() {
 }
 
 /**
- * Tapa toda la app hasta que la misma persona escriba su PIN (o su contraseña
- * si aún no tiene). Si cierran y abren la app, sigue bloqueada. El botón atrás no la quita.
+ * Tapa toda la app hasta que alguien escriba su PIN: si es de otra persona, entra con su
+ * propia sesión (una sola tablet para varios meseros). Quien tenía la sesión también puede
+ * usar su contraseña. Si cierran y abren la app, sigue bloqueada. El botón atrás no la quita.
  */
 export function PantallaBloqueo() {
   const { usuario, bloqueada } = useSesion();
@@ -35,22 +38,13 @@ export function PantallaBloqueo() {
 
 function Contenido() {
   const { usuario, desbloquear, salir } = useSesion();
-  // Lo que se sabía al entrar; se confirma con el servidor por si el admin le borró el PIN
-  const [tienePin, setTienePin] = useState<boolean | null>(usuario?.tiene_pin ?? null);
-  const [conContrasena, setConContrasena] = useState(usuario?.tiene_pin === false);
+  const { cola, sincronizar } = useConexion();
+  // Siempre empieza en PIN: aunque quien estaba no tenga, el siguiente mesero entra con el suyo
+  const [conContrasena, setConContrasena] = useState(false);
   const [codigo, setCodigo] = useState('');
   const [error, setError] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [espera, setEspera] = useState(0); // segundos que faltan tras muchos intentos fallidos
-
-  useEffect(() => {
-    getMe()
-      .then((yo) => {
-        setTienePin(!!yo.tiene_pin);
-        setConContrasena(!yo.tiene_pin);
-      })
-      .catch(() => null);
-  }, []);
 
   // Cuenta regresiva visible; al llegar a 0 se puede volver a intentar
   useEffect(() => {
@@ -66,7 +60,14 @@ function Contenido() {
     setEnviando(true);
     setError('');
     try {
-      await desbloquear(valor.trim());
+      // Las ventas sin conexión se envían con la sesión de quien está: primero se mandan,
+      // para que no queden a nombre del siguiente mesero
+      if (!conContrasena && cola.some((v) => v.estado === 'pendiente') && (await sincronizar()) > 0) {
+        setError(`Hay ventas de ${usuario?.nombre} sin enviar (sin conexión). Cuando vuelva la conexión se envían y se puede cambiar de usuario.`);
+        setCodigo('');
+        return;
+      }
+      if (await desbloquear(valor.trim(), conContrasena)) router.replace('/inicio');
     } catch (e) {
       const segundos = e instanceof ApiError ? Number(e.datos?.segundos ?? 0) : 0;
       if (segundos) {
@@ -90,8 +91,9 @@ function Contenido() {
       <View style={e.fondo}>
         <View style={e.tarjeta}>
           <Image source={require('../../assets/images/logo-negocio.png')} style={e.logo} resizeMode="contain" accessibilityLabel="Panadería Eduardo" />
-          <Text style={e.titulo}>🔒 Pantalla bloqueada</Text>
-          <Text style={e.sub}>{usuario.nombre}: escribe tu {conContrasena ? 'contraseña' : 'PIN'} para seguir</Text>
+          <Text style={e.titulo}>🔒 Tablet bloqueada</Text>
+          <Text style={e.sub}>{conContrasena ? `${usuario.nombre}: escribe tu contraseña` : 'Escribe tu PIN para entrar'}</Text>
+          {!conContrasena && <Text style={e.nota}>Última sesión: {usuario.nombre}</Text>}
 
           {conContrasena ? (
             <Campo value={codigo} onChangeText={setCodigo} secureTextEntry autoFocus autoCapitalize="none"
@@ -113,15 +115,12 @@ function Contenido() {
           <Boton titulo={enviando ? 'Verificando...' : espera > 0 ? `Espera ${espera} s` : 'Desbloquear'} onPress={() => enviar()}
             deshabilitado={!codigo.trim() || espera > 0} cargando={enviando} />
 
-          {tienePin && (
-            <Pressable onPress={() => { setConContrasena((v) => !v); setCodigo(''); setError(''); }} hitSlop={8}>
-              <Text style={e.enlace}>{conContrasena ? 'Usar PIN' : 'Usar mi contraseña'}</Text>
-            </Pressable>
-          )}
-          {tienePin === false && <Text style={e.nota}>Aún no tienes PIN: créalo con el botón &quot;Crear PIN&quot; del inicio.</Text>}
-          <Text style={e.nota}>¿Olvidaste tu PIN? Pide al administrador que te lo borre en Usuarios.</Text>
+          <Pressable onPress={() => { setConContrasena((v) => !v); setCodigo(''); setError(''); }} hitSlop={8}>
+            <Text style={e.enlace}>{conContrasena ? 'Usar PIN' : `Soy ${usuario.nombre}: usar mi contraseña`}</Text>
+          </Pressable>
+          <Text style={e.nota}>¿Sin PIN o lo olvidaste? Entra con tu correo y contraseña y créalo en «Crear PIN».</Text>
           <Pressable onPress={() => { salir(); }} hitSlop={8}>
-            <Text style={e.salir}>No soy {usuario.nombre}: cerrar sesión</Text>
+            <Text style={e.salir}>Entrar con correo y contraseña</Text>
           </Pressable>
         </View>
       </View>
@@ -163,7 +162,7 @@ export function VentanaMiPin({ visible, onCerrar }: { visible: boolean; onCerrar
   return (
     <Ventana visible={visible} onCerrar={cerrar} ancho={440}
       titulo={usuario?.tiene_pin ? 'Cambiar mi PIN' : 'Crear mi PIN'}
-      subtitulo="Lo usas para desbloquear la pantalla. Si eres administrador, también para autorizar."
+      subtitulo="Con él entras a la tablet bloqueada sin correo ni contraseña. Si eres administrador, también para autorizar."
       pie={
         <>
           <Boton estilo={{ flex: 1 }} titulo="Cancelar" variante="contorno" onPress={cerrar} />
