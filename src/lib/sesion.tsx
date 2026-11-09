@@ -3,7 +3,7 @@ import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, 
 
 import { borrarJson, guardarJson, leerJson } from './almacenLocal';
 import { ApiError, configurarApi, normalizarServidor } from './api';
-import { cambiarUsuarioConPin, cerrarSesion, desbloquearPantalla, getMe, iniciarSesion } from './servicios';
+import { cambiarUsuarioConPin, cerrarSesion, desbloquearPantalla, getMe, iniciarSesion, iniciarSesionConPin } from './servicios';
 import { borrar, guardar, leer } from './storage';
 import { Usuario } from './tipos';
 
@@ -14,6 +14,8 @@ interface Sesion {
   cajaId: number | null;
   fijarServidor: (valor: string) => Promise<void>;
   entrar: (email: string, password: string) => Promise<void>;
+  tabletRegistrada: boolean;   // ya alguien entró aquí con correo y contraseña: se puede entrar con PIN
+  entrarConPin: (pin: string) => Promise<void>;
   salir: () => Promise<void>;
   fijarCaja: (id: number | null) => Promise<void>;
   puede: (permiso: string) => boolean;
@@ -26,7 +28,8 @@ interface Sesion {
 
 const Contexto = createContext<Sesion | null>(null);
 
-const K = { servidor: 'pos_servidor', token: 'pos_token', caja: 'pos_caja', bloqueo: 'pos_bloqueo' };
+// dispositivo: llave de tablet registrada; no se borra al cerrar sesión (es de la tablet, no de la persona)
+const K = { servidor: 'pos_servidor', token: 'pos_token', caja: 'pos_caja', bloqueo: 'pos_bloqueo', dispositivo: 'pos_dispositivo' };
 // Última copia del usuario con sus permisos: para abrir la app y vender sin conexión
 const USUARIO = 'pos_usuario';
 
@@ -42,6 +45,7 @@ export function SesionProvider({ children }: { children: ReactNode }) {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [cajaId, setCajaId] = useState<number | null>(null);
   const [bloqueada, setBloqueada] = useState(false);
+  const [dispositivo, setDispositivo] = useState<string | null>(null);
 
   const limpiarSesion = useCallback(async () => {
     configurarApi({ token: null });
@@ -54,7 +58,8 @@ export function SesionProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     configurarApi({ alSesionVencida: () => { limpiarSesion(); } });
     (async () => {
-      const [guardado, t, c, b] = await Promise.all([leer(K.servidor), leer(K.token), leer(K.caja), leer(K.bloqueo)]);
+      const [guardado, t, c, b, d] = await Promise.all([leer(K.servidor), leer(K.token), leer(K.caja), leer(K.bloqueo), leer(K.dispositivo)]);
+      if (d) setDispositivo(d);
       const s = SERVIDOR_FIJO || guardado;
       if (s) {
         setServidor(s);
@@ -92,14 +97,37 @@ export function SesionProvider({ children }: { children: ReactNode }) {
     await guardar(K.servidor, url);
   }, []);
 
-  const entrar = useCallback(async (email: string, password: string) => {
-    const res = await iniciarSesion(email.trim(), password);
-    configurarApi({ token: res.token });
-    await guardar(K.token, res.token);
+  const abrirSesion = useCallback(async (token: string) => {
+    configurarApi({ token });
+    await guardar(K.token, token);
     const yo = await getMe();
     setUsuario(yo);
     recordarUsuario(yo);
   }, []);
+
+  const entrar = useCallback(async (email: string, password: string) => {
+    const res = await iniciarSesion(email.trim(), password, !dispositivo);
+    if (res.dispositivo) {
+      setDispositivo(res.dispositivo);
+      await guardar(K.dispositivo, res.dispositivo);
+    }
+    await abrirSesion(res.token);
+  }, [dispositivo, abrirSesion]);
+
+  const entrarConPin = useCallback(async (pin: string) => {
+    if (!dispositivo) throw new Error('Esta tablet aún no está registrada: entra con tu correo y contraseña.');
+    try {
+      const res = await iniciarSesionConPin(dispositivo, pin);
+      await abrirSesion(res.token);
+    } catch (err) {
+      // El admin desactivó a quien registró la tablet (o se borró la llave): se vuelve a registrar
+      if (err instanceof ApiError && err.datos?.status === 'DISPOSITIVO_NO_REGISTRADO') {
+        setDispositivo(null);
+        await borrar(K.dispositivo);
+      }
+      throw err;
+    }
+  }, [dispositivo, abrirSesion]);
 
   const salir = useCallback(async () => {
     try {
@@ -164,8 +192,8 @@ export function SesionProvider({ children }: { children: ReactNode }) {
   );
 
   const valor = useMemo(
-    () => ({ listo, servidor, usuario, cajaId, fijarServidor, entrar, salir, fijarCaja, puede, refrescarUsuario, bloqueada, bloquear, desbloquear }),
-    [listo, servidor, usuario, cajaId, fijarServidor, entrar, salir, fijarCaja, puede, refrescarUsuario, bloqueada, bloquear, desbloquear],
+    () => ({ listo, servidor, usuario, cajaId, fijarServidor, entrar, tabletRegistrada: !!dispositivo, entrarConPin, salir, fijarCaja, puede, refrescarUsuario, bloqueada, bloquear, desbloquear }),
+    [listo, servidor, usuario, cajaId, fijarServidor, entrar, dispositivo, entrarConPin, salir, fijarCaja, puede, refrescarUsuario, bloqueada, bloquear, desbloquear],
   );
 
   return <Contexto.Provider value={valor}>{children}</Contexto.Provider>;

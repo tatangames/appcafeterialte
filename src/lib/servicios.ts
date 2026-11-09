@@ -5,8 +5,12 @@ import { AjusteNuevo, Caja, CatalogoMesas, Comanda, ItemNuevo, MetodoPago, Orden
 type ConOrden = { success: number; message?: string; orden: Orden };
 
 // ── Sesión ────────────────────────────────────────────────────
-export const iniciarSesion = (email: string, password: string) =>
-  api.post<{ token: string; user: { id: number; nombre: string } }>('/login', { email, password, device_name: 'tablet-meseros' });
+// registrar: la tablet aún no tiene llave; el servidor la devuelve en «dispositivo» para entrar luego con PIN
+export const iniciarSesion = (email: string, password: string, registrar: boolean) =>
+  api.post<{ token: string; dispositivo?: string; user: { id: number; nombre: string } }>('/login',
+    { email, password, device_name: 'tablet-meseros', registrar_dispositivo: registrar });
+export const iniciarSesionConPin = (dispositivo: string, pin: string) =>
+  api.post<{ token: string; user: { id: number; nombre: string } }>('/login-pin', { dispositivo, pin });
 
 export const getMe = () => api.get<Usuario>('/me');
 
