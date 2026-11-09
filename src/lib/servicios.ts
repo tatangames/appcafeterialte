@@ -2,7 +2,8 @@
 import { api } from './api';
 import { AjusteNuevo, Caja, CatalogoMesas, Comanda, ItemNuevo, MetodoPago, Orden, TerminalMapa, Usuario, Venta } from './tipos';
 
-type ConOrden = { success: number; message?: string; orden: Orden };
+// avisos: se agregó igual, pero no alcanza la existencia (el cobro es el que lo exige)
+type ConOrden = { success: number; message?: string; orden: Orden; avisos?: string[] };
 
 // ── Sesión ────────────────────────────────────────────────────
 // registrar: la tablet aún no tiene llave; el servidor la devuelve en «dispositivo» para entrar luego con PIN

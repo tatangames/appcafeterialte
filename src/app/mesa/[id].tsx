@@ -96,11 +96,11 @@ export default function TerminalMesa() {
     }
   }, [terminalId, aplicar]);
 
-  // Existencias de las tarjetas: cambian con cada producto agregado (aquí o en otra mesa/tablet)
+  // Existencias de las tarjetas (las reales): cambian al cobrar, aquí o en otra mesa/tablet
   const cargarCatalogo = useCallback(() => {
     srv.getCatalogoMesas().then((c) => { catalogoGuardado = c; setCatalogo(c); }).catch(() => null);
   }, []);
-  // Tras agregar o quitar se vuelve a pedir, una sola vez aunque toquen varias veces seguidas
+  // Tras cada cambio se vuelve a pedir, una sola vez aunque toquen varias veces seguidas
   const esperaCatalogo = useRef<ReturnType<typeof setTimeout> | null>(null);
   const refrescarCatalogo = useCallback(() => {
     if (esperaCatalogo.current) clearTimeout(esperaCatalogo.current);
@@ -125,7 +125,7 @@ export default function TerminalMesa() {
   }, [cargarCatalogo]);
 
   /** Corre una acción sobre la orden y aplica la orden que devuelve. */
-  const hacer = async <T extends { orden?: Orden; message?: string }>(accion: () => Promise<T | null>, aviso?: boolean): Promise<T | null> => {
+  const hacer = async <T extends { orden?: Orden; message?: string; avisos?: string[] }>(accion: () => Promise<T | null>, aviso?: boolean): Promise<T | null> => {
     setOcupado(true);
     try {
       const res = await accion();
@@ -134,6 +134,8 @@ export default function TerminalMesa() {
         refrescarCatalogo();
       }
       if (aviso && res?.message) avisar(res.message);
+      // Se agregó, pero no alcanza la existencia: el mesero se entera ya; el cobro es el que lo exige
+      if (res?.avisos?.length) avisar('Existencia insuficiente', res.avisos.join('\n\n'));
       return res;
     } catch (e) {
       avisar('No se pudo completar', mensajeError(e));
@@ -163,11 +165,6 @@ export default function TerminalMesa() {
     setConExtras(null);
     const res = await hacer(() => srv.agregarItems(orden.id, [item], ticketId));
     if (!res) return;
-    // La tarjeta baja de inmediato; el catálogo del servidor lo confirma en un momento
-    setCatalogo((c) => c && {
-      ...c,
-      productos: c.productos.map((p) => (p.id === item.producto_id && p.disponible != null ? { ...p, disponible: p.disponible - item.cantidad } : p)),
-    });
     const nombre = catalogo?.productos.find((p) => p.id === item.producto_id)?.nombre ?? 'Producto';
     const cuenta = res.orden?.tickets.find((t) => t.id === ticketId)?.nombre ?? 'la cuenta';
     if (avisoAgregado.current) clearTimeout(avisoAgregado.current);
@@ -200,14 +197,13 @@ export default function TerminalMesa() {
     await hacer(() => srv.eliminarTicket(t.id), true);
   };
 
-  // Sin stock negativo (Datos del negocio): lo que ya no hay no se agrega. El servidor
-  // también lo revisa contando lo apartado en otras cuentas abiertas
+  // Sin stock negativo (Datos del negocio) la tarjeta dice «Agotado», pero se puede agregar igual:
+  // el servidor avisa si no alcanza (contando lo de cuentas abiertas) y el cobro es el que lo exige
   const agotado = (p: ProductoMesa) => catalogo?.permitir_stock_negativo === false
     && ((p.disponible != null && p.disponible <= 0) || (p.alcanza != null && p.alcanza <= 0));
 
   // Tocar agrega uno; los que llevan extras (o al dejar presionado) abren la ventana
   const tocarProducto = (p: ProductoMesa, largo = false) => {
-    if (agotado(p)) return avisar(p.disponible != null ? `No hay existencia de ${p.nombre}` : `No alcanzan los ingredientes para ${p.nombre}`);
     if (pagadaVista) return avisar(`${pagadaVista.nombre} ya está pagada`, 'Toca una cuenta abierta (azul) o «+ Cuenta» para agregar productos.');
     if (p.grupos.length > 0 || largo) setConExtras(p);
     else agregar({ producto_id: p.id, cantidad: 1 });
