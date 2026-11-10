@@ -193,6 +193,7 @@ function Producir({ recetaInicial }: { recetaInicial: number | null }) {
                 </View>
               </View>
 
+              {receta.ingredientes_ocultos ? <Text style={e.suave}>Tu rol no tiene permiso para ver los ingredientes de la receta.</Text> : (<>
               <Text style={e.subetiqueta}>Ingredientes (si se usó otra cantidad, escríbela en «Real»)</Text>
               <View style={e.cabeceraTabla}>
                 <Text style={[e.th, { flex: 1 }]}>Ingrediente</Text>
@@ -212,12 +213,15 @@ function Producir({ recetaInicial }: { recetaInicial: number | null }) {
                 </View>
               ))}
               {consumos.some((c) => c.falta) && <Text style={e.error}>No hay existencia suficiente de algún ingrediente: registra primero la compra o el ajuste.</Text>}
+              </>)}
 
               <Campo etiqueta="Observaciones (opcional)" value={obs} onChangeText={setObs} maxLength={500} />
-              <Text style={e.texto}>
-                Costo estimado: <Text style={e.negrita}>{dinero(costoEstimado)}</Text>
-                {prod > 0 ? ` · ${dinero4(costoEstimado / prod)} por ${receta.unidad ?? 'unidad'}` : ''}
-              </Text>
+              {!receta.ingredientes_ocultos && (
+                <Text style={e.texto}>
+                  Costo estimado: <Text style={e.negrita}>{dinero(costoEstimado)}</Text>
+                  {prod > 0 ? ` · ${dinero4(costoEstimado / prod)} por ${receta.unidad ?? 'unidad'}` : ''}
+                </Text>
+              )}
               <Boton titulo="Registrar producción" variante="exito" cargando={guardando} deshabilitado={!(prod > 0) || !(plan > 0)} onPress={registrar} />
             </>
           )}
@@ -268,6 +272,7 @@ function Producir({ recetaInicial }: { recetaInicial: number | null }) {
                 nota={`${detalle.rendimiento ?? '—'}% de lo planificado`} malo={detalle.rendimiento !== null && detalle.rendimiento < 95} />
               <Tarjeta titulo="Costo" valor={dinero(detalle.costo_total)} nota={`${dinero4(detalle.costo_unitario)} c/u`} />
             </View>
+            {detalle.ingredientes_ocultos ? <Text style={e.suave}>Tu rol no tiene permiso para ver los ingredientes de la receta.</Text> : (<>
             <View style={e.cabeceraTabla}>
               <Text style={[e.th, { flex: 1 }]}>Ingrediente</Text>
               <Text style={[e.th, e.colNum]}>Teórico</Text>
@@ -284,6 +289,7 @@ function Producir({ recetaInicial }: { recetaInicial: number | null }) {
                 <Text style={[e.texto, e.colNum]}>{dinero(c.costo_total)}</Text>
               </View>
             ))}
+            </>)}
             {detalle.observaciones ? <Text style={e.suave}>Obs.: {detalle.observaciones}</Text> : null}
           </>
         )}
@@ -540,6 +546,7 @@ function Resumen() {
             ))}
           </View>
 
+          {!datos.ingredientes_ocultos && (
           <View style={e.bloque}>
             <Text style={e.etiqueta}>Consumo de ingredientes (real frente a receta)</Text>
             <View style={e.cabeceraTabla}>
@@ -560,6 +567,7 @@ function Resumen() {
               </View>
             ))}
           </View>
+          )}
 
           <View style={e.bloque}>
             <Text style={e.etiqueta}>Mermas por motivo</Text>

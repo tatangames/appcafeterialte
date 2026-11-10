@@ -199,6 +199,8 @@ export interface ProduccionLista {
   estado: 'registrada' | 'anulada'; observaciones?: string | null; usuario?: string | null; turno?: string | null; motivo_anulacion?: string | null;
 }
 export interface ProduccionDetalle extends ProduccionLista {
+  // true cuando el rol no tiene «produccion.ver_receta»: llegan sin consumos
+  ingredientes_ocultos?: boolean;
   consumos?: { producto_id: number; producto: string | null; unidad: string | null; cantidad_teorica: number; cantidad_real: number; diferencia: number; costo_unitario: number; costo_total: number }[];
 }
 export interface ProductoProduccion { id: number; nombre: string; clase: string; unidad: string | null; controla_stock: boolean; permite_fraccion: boolean; stock: number | null; se_vende: boolean; costo_unitario: number }
@@ -208,6 +210,7 @@ export interface ResumenProduccion {
   totales: { producciones: number; costo: number; mermas: number; costo_mermas: number };
   por_producto: { producto_id: number; producto: string; unidad: string | null; producciones: number; planificada: number; producida: number; rendimiento: number | null; costo_total: number; costo_unitario: number }[];
   consumos: { producto_id: number; producto: string; unidad: string | null; teorica: number; real: number; diferencia: number; costo: number }[];
+  ingredientes_ocultos?: boolean;
   mermas: { por_motivo: { motivo: MotivoMerma; texto: string; cantidad: number; costo: number }[] };
   por_dia: { fecha: string; producciones: number; costo: number; mermas: number }[];
 }
@@ -456,7 +459,7 @@ export interface IngredienteRecetaCosto {
 export interface RecetaDetalle extends RecetaLista {
   version: number; activa: boolean; notas: string | null; usuario: string | null; actualizada: string;
   costo_total: number; precio_venta: number; margen: number | null;
-  ingredientes: IngredienteRecetaCosto[]; versiones: { id: number; version: number; activa: boolean; actualizada: string }[];
+  ingredientes: IngredienteRecetaCosto[]; ingredientes_ocultos?: boolean; versiones: { id: number; version: number; activa: boolean; actualizada: string }[];
 }
 export interface ProductoCatalogoProd {
   id: number; nombre: string; clase: string; se_vende: boolean; unidad_medida_id: number | null; unidad: string | null; unidad_tipo: string | null;
