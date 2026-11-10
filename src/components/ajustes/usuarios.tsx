@@ -116,6 +116,7 @@ export function RolesPermisos() {
   // Permisos con la explicación desplegada (botón «?»)
   const [conAyuda, setConAyuda] = useState<Set<string>>(new Set());
   const verAyuda = (n: string) => setConAyuda((s) => { const x = new Set(s); if (x.has(n)) x.delete(n); else x.add(n); return x; });
+  const [busqueda, setBusqueda] = useState('');
 
   useEffect(() => {
     op.getRoles().then((r) => {
@@ -136,6 +137,16 @@ export function RolesPermisos() {
   const original = useMemo(() => new Set(matriz?.modulos.flatMap((g) => g.permisos.filter((p) => p.asignado).map((p) => p.nombre)) ?? []), [matriz]);
   const cambios = [...marcados].filter((p) => !original.has(p)).length + [...original].filter((p) => !marcados.has(p)).length;
   const soloLectura = !!matriz?.rol.es_admin;
+  // Buscador: si el módulo coincide se muestran todos sus permisos; si no, solo los que coinciden
+  const modulosVisibles = useMemo(() => {
+    const q = normalizar(busqueda.trim());
+    const mods = matriz?.modulos ?? [];
+    if (!q) return mods;
+    return mods
+      .map((g) => normalizar(g.modulo).includes(q) ? g
+        : { ...g, permisos: g.permisos.filter((p) => [p.descripcion, p.nombre, p.ayuda ?? ''].some((t) => normalizar(t).includes(q))) })
+      .filter((g) => g.permisos.length > 0);
+  }, [matriz, busqueda]);
   const alternar = (n: string) => setMarcados((m) => { const x = new Set(m); if (x.has(n)) x.delete(n); else x.add(n); return x; });
   const poner = (ns: string[], on: boolean) => setMarcados((m) => { const x = new Set(m); ns.forEach((n) => (on ? x.add(n) : x.delete(n))); return x; });
 
@@ -154,12 +165,17 @@ export function RolesPermisos() {
   };
 
   return (
-    <ScrollView contentContainerStyle={e.contenido}>
+    <ScrollView contentContainerStyle={e.contenido} keyboardShouldPersistTaps="handled">
       <Opciones opciones={Object.entries(roles).map(([id, n]) => ({ valor: Number(id), texto: n }))} valor={rolId}
         onCambiar={async (id) => { if (!cambios || (await confirmar('Cambios sin guardar', '¿Descartarlos?', 'Descartar'))) setRolId(id); }} />
       {soloLectura && <Text style={e.aviso}>El administrador tiene acceso a todo, también a lo que se agregue en el futuro: no se edita.</Text>}
       {matriz && <Text style={e.suave}>{matriz.rol.usuarios} usuario(s) con este rol. Los cambios aplican al momento; en la tablet se ven al volver a Inicio.</Text>}
-      {(matriz?.modulos ?? []).map((g) => {
+      {matriz && (
+        <Campo etiqueta="Buscar permiso" value={busqueda} onChangeText={setBusqueda} placeholder="Ej. cobrar, inventario, PIN…"
+          autoCapitalize="none" autoCorrect={false} clearButtonMode="while-editing" />
+      )}
+      {matriz && busqueda.trim() !== '' && modulosVisibles.length === 0 && <Text style={e.suave}>Ningún permiso coincide con «{busqueda.trim()}».</Text>}
+      {modulosVisibles.map((g) => {
         const nombres = g.permisos.map((p) => p.nombre);
         const on = nombres.filter((n) => marcados.has(n)).length;
         return (
@@ -269,6 +285,8 @@ export function ManualesPorRol() {
     </ScrollView>
   );
 }
+
+const normalizar = (t: string) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
 const e = StyleSheet.create({
   contenido: { padding: 12, gap: 10, maxWidth: 1000, width: '100%', alignSelf: 'center' },

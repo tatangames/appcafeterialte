@@ -54,7 +54,7 @@ export default function Mesas() {
   if (!terminales && !error) return <Cargando />;
 
   return (
-    <SafeAreaView style={e.pantalla} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={e.pantalla} edges={['top', 'left', 'right', 'bottom']}>
       <View style={e.cabecera}>
         <View style={{ flex: 1 }}>
           <Text style={e.titulo}>Mesas</Text>

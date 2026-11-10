@@ -33,15 +33,16 @@ export const getTurnoActual = (cajaId: number) =>
   api.get<{ caja: { id: number; nombre: string }; turno: { id: number; usuario_apertura_id: number; usuario_apertura: string | null; abierto_at: string } | null;
     turno_ajeno?: boolean; // turno de otra persona: solo se puede cerrar
     aviso_cambio?: boolean; // Datos del negocio → «Avisar si no alcanza el cambio»
-    turno_anterior?: { cerro: string | null; cerrado_at: string | null } | null;
+    turno_anterior?: { cerro: string | null; cerrado_at: string | null; efectivo_contado: number | null } | null;
+    fondo_sugerido?: number | null; // lo que quedó en la gaveta al cerrar el turno anterior
     por_comprar?: { producto_id: number; producto: string; unidad: string | null; stock_actual: number; stock_minimo: number }[];
     // Con turno abierto: efectivo que debería haber (null con cierre ciego)
     resumen?: { efectivo_esperado: number | null } }>(
     `/caja/turno-actual?caja_id=${cajaId}`);
 
 // El turno queda a nombre de quien inició sesión
-export const abrirTurno = (cajaId: number, fondoInicial: number) =>
-  api.post<{ message: string }>('/caja/turnos/abrir', { caja_id: cajaId, fondo_inicial: fondoInicial });
+export const abrirTurno = (cajaId: number, fondoInicial: number, observaciones?: string) =>
+  api.post<{ message: string }>('/caja/turnos/abrir', { caja_id: cajaId, fondo_inicial: fondoInicial, observaciones });
 
 // ── Mesas ─────────────────────────────────────────────────────
 export const getMapa = async () => (await api.get<{ terminales: TerminalMapa[] }>('/mesas/mapa')).terminales;

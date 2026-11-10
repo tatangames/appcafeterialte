@@ -44,7 +44,7 @@ export default function Proveedores() {
   const paga = puede('cuentas_pagar.gestionar');
 
   return (
-    <SafeAreaView style={e.pantalla} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={e.pantalla} edges={['top', 'left', 'right', 'bottom']}>
       <Encabezado titulo="Proveedores" subtitulo="Lo que se les debe y sus pagos"
         derecha={gestiona ? <Boton titulo="+ Proveedor" chico onPress={() => setFormulario({ proveedor: null })} /> : null} />
       <View style={e.barra}>

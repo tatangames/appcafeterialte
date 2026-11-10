@@ -49,7 +49,7 @@ export default function Manuales() {
   if (manual) {
     const mo = modulos!.find((x) => x.id === manual.modulo)!;
     return (
-      <SafeAreaView style={e.pantalla} edges={['top', 'left', 'right']}>
+      <SafeAreaView style={e.pantalla} edges={['top', 'left', 'right', 'bottom']}>
         <Encabezado titulo={manual.titulo} subtitulo={mo.titulo} derecha={<Boton titulo="Todos los manuales" chico variante="contorno" onPress={() => abrir(null)} />} />
         <ScrollView key={manual.id} contentContainerStyle={e.contenido}>
           <Detalle manual={manual} modulo={mo.id} disponible={puedeUsar(manual)}
@@ -70,7 +70,7 @@ export default function Manuales() {
   const ancho = (Math.min(width, 1100) - 40 - 12 * (columnas - 1)) / columnas;
 
   return (
-    <SafeAreaView style={e.pantalla} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={e.pantalla} edges={['top', 'left', 'right', 'bottom']}>
       <Encabezado titulo="Manuales" subtitulo="Paso a paso, casos de uso y preguntas frecuentes" />
       <ScrollView contentContainerStyle={e.contenido} keyboardShouldPersistTaps="handled">
         {error ? <Text style={e.error}>{error}</Text> : null}

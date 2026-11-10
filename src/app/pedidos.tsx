@@ -45,7 +45,7 @@ export default function PedidosEspeciales() {
   };
 
   return (
-    <SafeAreaView style={e.pantalla} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={e.pantalla} edges={['top', 'left', 'right', 'bottom']}>
       <Encabezado titulo="Pedidos especiales" subtitulo="Encargos con fecha de entrega y anticipo"
         derecha={<Boton titulo="+ Nuevo pedido" chico onPress={() => setNuevo(true)} />} />
       <View style={e.barra}>

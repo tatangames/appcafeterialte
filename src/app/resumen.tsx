@@ -34,7 +34,7 @@ export default function Resumen() {
   const maxHora = Math.max(1, ...panel.por_hora.map((h) => h.total));
 
   return (
-    <SafeAreaView style={e.pantalla} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={e.pantalla} edges={['top', 'left', 'right', 'bottom']}>
       <Encabezado titulo="Resumen del día" subtitulo={fecha(panel.fecha)} />
       <ScrollView contentContainerStyle={e.contenido}
         refreshControl={<RefreshControl refreshing={refrescando} onRefresh={async () => { setRefrescando(true); await cargar(); setRefrescando(false); }} />}>

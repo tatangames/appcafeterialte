@@ -90,7 +90,7 @@ export default function Gastos() {
   };
 
   return (
-    <SafeAreaView style={e.pantalla} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={e.pantalla} edges={['top', 'left', 'right', 'bottom']}>
       <Encabezado titulo="Gastos" subtitulo={datos ? `${textoRango(rango)} · ${dinero(datos.total_monto)}` : undefined}
         derecha={
           <View style={{ flexDirection: 'row', gap: 8 }}>

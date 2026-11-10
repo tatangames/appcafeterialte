@@ -57,7 +57,7 @@ export default function Inventario() {
   const tocable = registra || ajusta || veKardex;
 
   return (
-    <SafeAreaView style={e.pantalla} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={e.pantalla} edges={['top', 'left', 'right', 'bottom']}>
       <Encabezado titulo="Inventario" subtitulo={productos ? `${productos.length} producto(s) · ${enAlerta} en su mínimo` : undefined}
         derecha={ajusta ? <Boton titulo="Conteo físico" chico variante="contorno" onPress={() => setContando(true)} /> : null} />
       <View style={e.filtros}>

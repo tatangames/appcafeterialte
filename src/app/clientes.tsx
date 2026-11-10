@@ -49,7 +49,7 @@ export default function Clientes() {
   const cobra = puede('cuentas_cobrar.gestionar');
 
   return (
-    <SafeAreaView style={e.pantalla} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={e.pantalla} edges={['top', 'left', 'right', 'bottom']}>
       <Encabezado titulo="Clientes" subtitulo="Crédito, lo que deben y sus abonos"
         derecha={puede('clientes.gestionar') ? <Boton titulo="+ Cliente" chico onPress={() => setFormulario({ cliente: null })} /> : null} />
       <View style={e.barra}>

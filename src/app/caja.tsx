@@ -7,7 +7,7 @@ import { Boton, Campo, Cargando } from '@/components/ui';
 import { C, radio } from '@/constants/colores';
 import { mensajeError } from '@/lib/api';
 import { avisar } from '@/lib/aviso';
-import { cantidad, fecha } from '@/lib/formato';
+import { cantidad, dinero, fecha } from '@/lib/formato';
 import { abrirTurno, getCatalogosCaja, getTurnoActual } from '@/lib/servicios';
 import { useSesion } from '@/lib/sesion';
 import { Caja } from '@/lib/tipos';
@@ -20,13 +20,23 @@ export default function CajaPantalla() {
   const [cajas, setCajas] = useState<Caja[] | null>(null);
   const [turno, setTurno] = useState<Turno | null>(null);
   const [fondo, setFondo] = useState('');
+  const [obs, setObs] = useState('');
   const [abriendo, setAbriendo] = useState(false);
+
+  // El efectivo no se retira al cerrar: lo que quedó es el fondo del nuevo turno
+  const mostrarTurno = (t: Turno | null) => {
+    setTurno(t);
+    setFondo(t && !t.turno && t.fondo_sugerido != null ? String(t.fondo_sugerido) : '');
+    setObs('');
+  };
+  const quedo = turno && !turno.turno ? turno.fondo_sugerido ?? null : null;
+  const fondoDistinto = quedo !== null && Math.abs(Number(fondo || 0) - quedo) >= 0.005;
 
   const cargar = useCallback(async () => {
     try {
       const cat = await getCatalogosCaja();
       setCajas(cat.cajas);
-      if (cajaId) setTurno(await getTurnoActual(cajaId));
+      if (cajaId) mostrarTurno(await getTurnoActual(cajaId));
     } catch (e) {
       avisar('No se pudo cargar la caja', mensajeError(e));
       setCajas([]);
@@ -37,16 +47,15 @@ export default function CajaPantalla() {
 
   const elegir = async (id: number) => {
     await fijarCaja(id);
-    setTurno(await getTurnoActual(id).catch(() => null));
+    mostrarTurno(await getTurnoActual(id).catch(() => null));
   };
 
   const abrir = async () => {
     if (!cajaId) return;
     setAbriendo(true);
     try {
-      await abrirTurno(cajaId, Number(fondo || 0));
-      setFondo('');
-      setTurno(await getTurnoActual(cajaId));
+      await abrirTurno(cajaId, Number(fondo || 0), obs.trim() || undefined);
+      mostrarTurno(await getTurnoActual(cajaId));
     } catch (e) {
       avisar('No se pudo abrir el turno', mensajeError(e));
     } finally {
@@ -96,9 +105,20 @@ export default function CajaPantalla() {
 
               {puede('caja.abrir') ? (
                 <>
-                  <Campo etiqueta="Fondo inicial ($)" value={fondo} onChangeText={setFondo} keyboardType="decimal-pad" placeholder="0.00" />
+                  {quedo !== null && (
+                    <Text style={e.quedo}>En la caja quedaron {dinero(quedo)} del turno anterior: ese es el fondo con el que abre este turno.</Text>
+                  )}
+                  <Campo etiqueta="Fondo inicial ($)" value={fondo} onChangeText={(v) => setFondo(v.replace(',', '.').replace(/[^0-9.]/g, ''))}
+                    keyboardType="decimal-pad" placeholder="0.00" />
+                  {fondoDistinto && (
+                    <>
+                      <Text style={e.aviso}>Es distinto a lo que quedó ({dinero(quedo!)}). Explica por qué.</Text>
+                      <Campo etiqueta="Observaciones" value={obs} onChangeText={setObs} placeholder="El dueño retiró $… / se contó otra vez…" maxLength={500} />
+                    </>
+                  )}
                   <Text style={e.suave}>El turno queda a nombre de {usuario?.nombre}. Si atiende otra persona, cierra sesión y que entre con su usuario.</Text>
-                  <Boton titulo={`Abrir turno de ${usuario?.nombre ?? ''}`} variante="exito" onPress={abrir} cargando={abriendo} />
+                  <Boton titulo={`Abrir turno de ${usuario?.nombre ?? ''}`} variante="exito" onPress={abrir} cargando={abriendo}
+                    deshabilitado={fondoDistinto && obs.trim().length < 3} />
                 </>
               ) : (
                 <Text style={e.suave}>Pide a un cajero o encargado que abra el turno para poder cobrar. Puedes tomar órdenes igual.</Text>
@@ -120,6 +140,8 @@ const e = StyleSheet.create({
   subtitulo: { fontSize: 18, fontWeight: '700', color: C.texto },
   suave: { color: C.suave, fontSize: 14 },
   ok: { color: C.exito, fontSize: 16, fontWeight: '600' },
+  quedo: { padding: 10, borderRadius: radio, backgroundColor: '#DCFCE7', color: '#166534', fontSize: 14, overflow: 'hidden' },
+  aviso: { padding: 10, borderRadius: radio, backgroundColor: '#FEF3C7', color: '#92400E', fontSize: 14, overflow: 'hidden' },
   cajas: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   caja: { flexGrow: 1, minWidth: 200, padding: 16, borderRadius: radio, borderWidth: 2, borderColor: C.borde, backgroundColor: '#fff', gap: 4 },
   cajaNombre: { fontSize: 18, fontWeight: '700', color: C.texto },

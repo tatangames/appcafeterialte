@@ -58,7 +58,7 @@ export default function VentaDetalle() {
   };
 
   return (
-    <SafeAreaView style={e.pantalla} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={e.pantalla} edges={['top', 'left', 'right', 'bottom']}>
       <Encabezado titulo={`Venta ${venta.numero}`} subtitulo={`${fecha(venta.fecha)} · ${venta.usuario ?? ''} · ${venta.caja ?? ''}`} />
       <ScrollView contentContainerStyle={e.contenido}>
         <View style={e.bloque}>

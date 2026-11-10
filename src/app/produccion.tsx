@@ -31,7 +31,7 @@ export default function Produccion() {
   const [pestana, setPestana] = useState<Pestana>(verProd ? 'produccion' : 'mermas');
 
   return (
-    <SafeAreaView style={e.pantalla} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={e.pantalla} edges={['top', 'left', 'right', 'bottom']}>
       <Encabezado titulo="Producción" subtitulo={fechaCorta(hoy())} />
       <View style={e.pestanas}>
         {verProd && <PestanaBoton activa={pestana === 'produccion'} texto="Producción" onPress={() => setPestana('produccion')} />}

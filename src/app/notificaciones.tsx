@@ -66,7 +66,7 @@ export default function Notificaciones() {
   };
 
   return (
-    <SafeAreaView style={e.pantalla} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={e.pantalla} edges={['top', 'left', 'right', 'bottom']}>
       <Encabezado
         titulo="Notificaciones"
         subtitulo={noLeidas > 0 ? `${noLeidas} sin ver` : 'Estás al día'}

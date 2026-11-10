@@ -32,7 +32,7 @@ export default function Cierres() {
   };
 
   return (
-    <SafeAreaView style={e.pantalla} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={e.pantalla} edges={['top', 'left', 'right', 'bottom']}>
       <Encabezado titulo="Historial de cierres" subtitulo={datos ? `${datos.totales.turnos} turno(s) · ventas ${dinero(datos.totales.ventas)}` : undefined} />
       <FiltroFechas valor={rango} onCambio={setRango} />
       <View style={e.barra}>

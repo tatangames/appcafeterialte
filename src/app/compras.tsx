@@ -27,7 +27,7 @@ export default function Compras() {
   const verProveedores = puede('proveedores.gestionar') || puede('cuentas_pagar.gestionar');
 
   return (
-    <SafeAreaView style={e.pantalla} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={e.pantalla} edges={['top', 'left', 'right', 'bottom']}>
       <Encabezado titulo="Compras" subtitulo={datos ? `${textoRango(rango)} · ${datos.total} compra(s) · ${dinero(datos.totales.total)}` : undefined}
         derecha={
           <>

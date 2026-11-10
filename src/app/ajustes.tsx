@@ -28,7 +28,7 @@ export default function Ajustes() {
   const [seccion, setSeccion] = useState<Seccion>(visibles[0]?.id ?? 'mesas');
 
   return (
-    <SafeAreaView style={e.pantalla} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={e.pantalla} edges={['top', 'left', 'right', 'bottom']}>
       <Encabezado titulo="Ajustes" subtitulo="Configuración del sistema" />
       <View style={e.barra}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={e.pestanas}>

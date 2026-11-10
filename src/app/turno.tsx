@@ -168,7 +168,7 @@ export default function Turno() {
   };
 
   return (
-    <SafeAreaView style={e.pantalla} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={e.pantalla} edges={['top', 'left', 'right', 'bottom']}>
       <Encabezado titulo="Caja y turno" subtitulo={datos.caja.nombre}
         derecha={
           <>
@@ -282,7 +282,7 @@ export default function Turno() {
         <Campo etiqueta="Motivo" value={motivo} onChangeText={setMotivo} />
       </Ventana>
 
-      <Ventana visible={cerrando} titulo="Cerrar turno" subtitulo="Cuenta la gaveta y escribe el total (incluye el fondo inicial)" onCerrar={() => setCerrando(false)} ancho={520}
+      <Ventana visible={cerrando} titulo="Cerrar turno" subtitulo="Cuenta la gaveta y escribe el total (incluye el fondo inicial). El dinero se queda en la caja: es el fondo del siguiente turno." onCerrar={() => setCerrando(false)} ancho={520}
         pie={<Boton estilo={{ flex: 1 }} titulo={contadoTexto === '' ? 'Escribe el efectivo contado' : `Cerrar con ${dinero(contado)}`}
           cargando={ocupado} deshabilitado={contadoTexto === ''} onPress={cerrar} />}>
         <Campo etiqueta="Efectivo contado ($)" value={contadoTexto} onChangeText={(v) => setContadoTexto(v.replace(',', '.').replace(/[^0-9.]/g, ''))}

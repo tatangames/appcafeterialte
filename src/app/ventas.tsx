@@ -22,7 +22,7 @@ export default function Ventas() {
   useFocusEffect(useCallback(() => { cargar(); }, [cargar]));
 
   return (
-    <SafeAreaView style={e.pantalla} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={e.pantalla} edges={['top', 'left', 'right', 'bottom']}>
       <Encabezado titulo="Ventas" subtitulo={datos ? `${datos.totales.cantidad} venta(s) · ${dinero(datos.totales.total)}` : undefined} />
       <FiltroFechas valor={rango} onCambio={setRango} />
       {error ? <Text style={e.error}>{error}</Text> : null}

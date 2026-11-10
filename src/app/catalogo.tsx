@@ -27,7 +27,7 @@ export default function Catalogo() {
   const [pestana, setPestana] = useState<Pestana>(visibles[0]?.id ?? 'productos');
 
   return (
-    <SafeAreaView style={e.pantalla} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={e.pantalla} edges={['top', 'left', 'right', 'bottom']}>
       <Encabezado titulo="Catálogo" subtitulo="Productos, recetas, extras y categorías" />
       <View style={e.pestanas}>
         {visibles.map((p) => (
