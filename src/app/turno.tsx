@@ -8,7 +8,7 @@ import { VentanaMotivo } from '@/components/motivo';
 import { Boton, Campo, Cargando, Ventana } from '@/components/ui';
 import { C, radio } from '@/constants/colores';
 import { mensajeError } from '@/lib/api';
-import { avisar, confirmar } from '@/lib/aviso';
+import { avisar, avisarYEsperar, confirmar } from '@/lib/aviso';
 import { cantidad, dinero, fecha, hora, nuevoUuid } from '@/lib/formato';
 import * as op from '@/lib/operaciones';
 import { useConexion } from '@/lib/conexion';
@@ -155,7 +155,9 @@ export default function Turno() {
         router.replace('/caja');
         return;
       }
-      avisar('Turno cerrado', `${cuadre}. La tablet quedó bloqueada: quien abra el siguiente turno entra con su PIN.`);
+      // Primero lo lee quien cerró; al aceptar se bloquea (si no, el aviso queda detrás del
+      // bloqueo y lo ve el siguiente mesero al entrar)
+      await avisarYEsperar('Turno cerrado', `${cuadre}. Al aceptar, la tablet se bloquea: quien abra el siguiente turno entra con su PIN.`);
       router.replace('/inicio');
       await bloquear();
     } catch (err) {

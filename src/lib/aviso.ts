@@ -9,6 +9,16 @@ export const avisar = (titulo: string, mensaje?: string) => {
   Alert.alert(titulo, mensaje);
 };
 
+/** Igual que avisar, pero espera a que lo cierren (para no taparlo con otra pantalla). */
+export const avisarYEsperar = (titulo: string, mensaje?: string): Promise<void> => {
+  if (Platform.OS === 'web') {
+    window.alert(mensaje ? `${titulo}\n\n${mensaje}` : titulo);
+    return Promise.resolve();
+  }
+  return new Promise((resolver) =>
+    Alert.alert(titulo, mensaje, [{ text: 'Aceptar', onPress: () => resolver() }], { cancelable: true, onDismiss: () => resolver() }));
+};
+
 export const confirmar = (titulo: string, mensaje: string, textoSi = 'Sí'): Promise<boolean> => {
   if (Platform.OS === 'web') return Promise.resolve(window.confirm(`${titulo}\n\n${mensaje}`));
   return new Promise((resolver) =>
