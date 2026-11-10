@@ -48,16 +48,23 @@ export function ExtrasCatalogo() {
       {datos?.grupos.length === 0 && <Text style={e.vacio}>Todavía no hay extras. Crea el primero, por ejemplo «Leche».</Text>}
       {datos && datos.grupos.length > 0 && visibles.length === 0 && <Text style={e.vacio}>Ningún grupo coincide con «{buscar.trim()}».</Text>}
       {visibles.map((g) => (
-        <Pressable key={g.id} onPress={() => setEditando({ grupo: g })} style={({ pressed }) => [e.tarjeta, !g.activo && { opacity: 0.5 }, pressed && { opacity: 0.85 }]}>
+        <Pressable key={g.id} onPress={() => setEditando({ grupo: g })} style={({ pressed }) => [e.tarjeta, pressed && { opacity: 0.85 }]}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <Text style={e.titulo}>{g.nombre}</Text>
-            {g.obligatorio && <Etiqueta texto="Obligatorio" fondo="#FEF3C7" color="#92400E" />}
-            <Etiqueta texto={g.multiple ? 'Varias opciones' : 'Una opción'} fondo="#E0F2FE" color="#075985" />
-            {!g.activo && <Etiqueta texto="Inactivo" fondo="#E5E7EB" color="#374151" />}
+            {g.obligatorio && <Etiqueta texto="Elegir al menos una" fondo="#FEF3C7" color="#92400E" />}
           </View>
-          <Text style={e.texto}>
-            {g.opciones.filter((o) => o.activo !== false).map((o) => `${o.nombre}${o.precio > 0 ? ` +${dinero(o.precio)}` : ''}${(o.maximo ?? 1) > 1 ? ` hasta ${o.maximo}` : ''}${o.insumo ? ` (${o.cantidad} ${o.unidad ?? ''} de ${o.insumo})` : ''}`).join(' · ')}
-          </Text>
+          <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+            {g.opciones.map((o) => (
+              <View key={o.id} style={[e.chipOpcion, o.activo === false && { opacity: 0.45 }]}>
+                <Text style={[e.texto, o.activo === false && { textDecorationLine: 'line-through' }]}>
+                  {o.nombre}{o.precio > 0 ? ` +${dinero(o.precio)}` : ''}{(o.maximo ?? 1) > 1 ? ` · hasta ${o.maximo}` : ''}{o.insumo ? ` (${o.cantidad} ${o.unidad ?? ''} de ${o.insumo})` : ''}
+                </Text>
+                {o.obligatorio && <Etiqueta texto="Obligatorio" fondo="#FEF3C7" color="#92400E" />}
+                {o.exclusiva && <Etiqueta texto="Una sola" fondo="#E0F2FE" color="#075985" />}
+                {o.activo === false && <Etiqueta texto="Apagada" fondo="#E5E7EB" color="#374151" />}
+              </View>
+            ))}
+          </View>
           <Text style={e.suave}>{g.productos.length ? `En: ${g.productos.map((p) => p.nombre).join(', ')}` : 'No está asignado a ningún producto'}</Text>
         </Pressable>
       ))}
@@ -66,14 +73,20 @@ export function ExtrasCatalogo() {
   );
 }
 
-interface OpcionForm { id?: number; nombre: string; precio: string; maximo: string; producto_id: number | null; cantidad: string; unidad_medida_id: number | null }
+interface OpcionForm {
+  id?: number; nombre: string; precio: string; maximo: string; obligatorio: boolean; exclusiva: boolean; activo: boolean;
+  producto_id: number | null; cantidad: string; unidad_medida_id: number | null;
+}
+const opcionVacia = (): OpcionForm => ({ nombre: '', precio: '', maximo: '1', obligatorio: false, exclusiva: false, activo: true, producto_id: null, cantidad: '', unidad_medida_id: null });
 
 // «¿Cómo funciona?» del grupo de extras (la misma explicación que la web)
 const AYUDA: { titulo: string; lineas: string[] }[] = [
   { titulo: 'Nombre', lineas: ['Corto, porque es lo que ve el mesero: «Salsa», «Leche», «Huevos». El producto al que aplica se elige abajo, en Productos (no hace falta escribirlo en el nombre).'] },
-  { titulo: 'Obligatorio y Varias opciones', lineas: [
-    'Obligatorio: no deja agregar el producto sin elegir una opción. Ej.: «Huevos» del desayuno (estrellados, revueltos).',
-    'Varias opciones: encendido, se marcan varias a la vez (toppings: fresas y mantequilla). Apagado, solo una (salsa: Nutella o caramelo).',
+  { titulo: 'Casillas de cada opción', lineas: [
+    'Obligatorio: la opción siempre va marcada y no se puede quitar (si tiene máximo, se puede subir). Ej.: «Tortillas» del desayuno.',
+    'Una sola: al elegirla se quitan las demás opciones del grupo, y al elegir otra se quita ella. Ej.: «Sin azúcar» quita «Azúcar extra». Si todas son «una sola», solo se elige una (Estrellados, Revueltos o Picados).',
+    'Elegir al menos una (del grupo): no deja agregar el producto sin marcar alguna opción. Ej.: «Huevos» del desayuno.',
+    'Activa: apagada no sale al vender, pero se conserva (un sabor que se acabó por temporada).',
   ] },
   { titulo: 'Precio extra', lineas: [
     'Lo que se suma al precio del producto si el cliente elige esa opción. Waffle $2.75 + Nutella (+$0.50) = $3.25.',
@@ -90,13 +103,12 @@ const AYUDA: { titulo: string; lineas: string[] }[] = [
 function FormGrupo({ grupo, datos, onCerrar, onListo }: { grupo: op.GrupoExtra | null; datos: Datos; onCerrar: () => void; onListo: () => void }) {
   const [nombre, setNombre] = useState(grupo?.nombre ?? '');
   const [obligatorio, setObligatorio] = useState(grupo?.obligatorio ?? false);
-  const [multiple, setMultiple] = useState(grupo?.multiple ?? false);
-  const [activo, setActivo] = useState(grupo?.activo ?? true);
   const [opciones, setOpciones] = useState<OpcionForm[]>(
-    grupo?.opciones.filter((o) => o.activo !== false).map((o) => ({
+    grupo?.opciones.map((o) => ({
       id: o.id, nombre: o.nombre, precio: o.precio ? String(o.precio) : '', maximo: String(o.maximo ?? 1), producto_id: o.producto_id,
+      obligatorio: !!o.obligatorio, exclusiva: !!o.exclusiva, activo: o.activo !== false,
       cantidad: o.cantidad ? String(o.cantidad) : '', unidad_medida_id: o.unidad_medida_id,
-    })) ?? [{ nombre: '', precio: '', maximo: '1', producto_id: null, cantidad: '', unidad_medida_id: null }]);
+    })) ?? [opcionVacia()]);
   const [productos, setProductos] = useState<number[]>(grupo?.productos.map((p) => p.id) ?? []);
   const [eligiendoInsumo, setEligiendoInsumo] = useState<number | null>(null);
   const [buscarInsumo, setBuscarInsumo] = useState('');
@@ -125,9 +137,10 @@ function FormGrupo({ grupo, datos, onCerrar, onListo }: { grupo: op.GrupoExtra |
     setGuardando(true);
     try {
       const r = await op.guardarGrupoExtras({
-        nombre: nombre.trim(), obligatorio, multiple, activo, productos,
+        nombre: nombre.trim(), obligatorio, productos,
         opciones: opciones.map((o) => ({
           id: o.id, nombre: o.nombre.trim(), precio: Number(o.precio || 0), producto_id: o.producto_id,
+          obligatorio: o.obligatorio, exclusiva: o.exclusiva, activo: o.activo,
           maximo: Math.min(20, Math.max(1, Math.floor(Number(o.maximo) || 1))),
           cantidad: o.producto_id ? Number(o.cantidad) : null, unidad_medida_id: o.producto_id ? o.unidad_medida_id : null,
         })),
@@ -165,16 +178,14 @@ function FormGrupo({ grupo, datos, onCerrar, onListo }: { grupo: op.GrupoExtra |
         </View>
       )}
       <Campo etiqueta="Nombre del grupo" value={nombre} onChangeText={setNombre} placeholder="Leche, Endulzante, Saborizante..." maxLength={80} />
-      <Interruptor titulo="Obligatorio" detalle="No deja agregar el producto sin elegir una opción" valor={obligatorio} onCambiar={setObligatorio} />
-      <Interruptor titulo="Varias opciones" detalle="Se puede elegir más de una (ej. saborizantes). Apagado: solo una (ej. tipo de leche)" valor={multiple} onCambiar={setMultiple} />
-      {grupo && <Interruptor titulo="Activo" valor={activo} onCambiar={setActivo} />}
+      <Interruptor titulo="Elegir al menos una" detalle="No deja agregar el producto sin marcar alguna opción del grupo (ej. Huevos: estrellados o revueltos)" valor={obligatorio} onCambiar={setObligatorio} />
 
       <Seccion titulo="Opciones" />
       {opciones.map((o, i) => {
         const ins = insumo(o.producto_id);
         const unidadesInsumo = datos.unidades.filter((u) => !ins?.tipo || u.tipo === ins.tipo);
         return (
-          <View key={i} style={e.opcion}>
+          <View key={i} style={[e.opcion, !o.activo && { opacity: 0.6 }]}>
             <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-end' }}>
               <View style={{ flex: 2 }}><Campo etiqueta="Opción" value={o.nombre} onChangeText={(t) => cambiar(i, { nombre: t })} placeholder="Deslactosada" maxLength={80} /></View>
               <View style={{ flex: 1 }}><Campo etiqueta="Precio extra ($)" value={o.precio} onChangeText={(t) => cambiar(i, { precio: t.replace(/[^0-9.]/g, '') })} keyboardType="decimal-pad" placeholder="0.00" /></View>
@@ -209,11 +220,14 @@ function FormGrupo({ grupo, datos, onCerrar, onListo }: { grupo: op.GrupoExtra |
                 <Text style={e.enlace}>+ Descontar un insumo al venderla (opcional)</Text>
               </Pressable>
             )}
+            <Interruptor titulo="Obligatorio" detalle="Siempre va marcada y no se puede quitar" valor={o.obligatorio} onCambiar={(v) => cambiar(i, { obligatorio: v })} />
+            <Interruptor titulo="Una sola" detalle="Al elegirla se quitan las demás opciones del grupo" valor={o.exclusiva} onCambiar={(v) => cambiar(i, { exclusiva: v })} />
+            <Interruptor titulo="Activa" detalle={o.activo ? 'Sale al vender' : 'Apagada: no sale al vender'} valor={o.activo} onCambiar={(v) => cambiar(i, { activo: v })} />
           </View>
         );
       })}
       <Text style={{ fontSize: 13, color: C.suave }}>Máximo: cuántas veces se puede pedir esa opción en un mismo producto (Huevo extra: 3). Con 1 solo se marca o no.</Text>
-      <Boton titulo="+ Agregar opción" variante="contorno" onPress={() => setOpciones((os) => [...os, { nombre: '', precio: '', maximo: '1', producto_id: null, cantidad: '', unidad_medida_id: null }])} />
+      <Boton titulo="+ Agregar opción" variante="contorno" onPress={() => setOpciones((os) => [...os, opcionVacia()])} />
 
       <Seccion titulo="Productos que lo usan" />
       <View style={e.chips}>
@@ -235,6 +249,7 @@ function FormGrupo({ grupo, datos, onCerrar, onListo }: { grupo: op.GrupoExtra |
 }
 
 const e = StyleSheet.create({
+  chipOpcion: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', backgroundColor: '#F3F4F6', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
   ayudaBoton: { alignSelf: 'flex-end', borderWidth: 1, borderColor: '#D1D5DB', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
   ayudaBotonActivo: { backgroundColor: C.primario, borderColor: C.primario },
   ayudaBotonTexto: { fontSize: 13, fontWeight: '600', color: C.suave },

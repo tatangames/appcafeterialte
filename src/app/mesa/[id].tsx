@@ -272,7 +272,9 @@ export default function TerminalMesa() {
     if (!res) return;
     if (itemIds) setSeleccion([]);
     const imp = res.impresion;
-    if (imp.sin_impresora) avisar('Comanda registrada', 'No hay impresora configurada: imprímela desde la web o configura la impresora del área.');
+    // Lo que se entrega directo (Coca-Cola, pan de vitrina: «Imprime comanda» apagado) no genera comanda
+    if (res.comandas.length === 0) avisar('Entregado sin comanda', `${res.message ?? 'Productos entregados (no pasan por cocina)'}. Para que salga en la comanda, enciende «Imprime comanda» en el producto.`);
+    else if (imp.sin_impresora) avisar('Comanda registrada', 'No hay impresora configurada: imprímela desde la web o configura la impresora del área.');
     else if (imp.errores.length) avisar('Algunas comandas no se imprimieron', imp.errores.join('\n'));
   };
 
@@ -416,9 +418,20 @@ export default function TerminalMesa() {
   // ── Pantalla ────────────────────────────────────────────────
   if (!cargado) return <Cargando />;
 
+  // El cambio queda en pantalla hasta tocar «Listo», aunque la mesa ya quedó libre y la
+  // pantalla se recargue sola (cada 20 s): si no, la ventana desaparecía al recargar
+  const ventanaCobrada = (
+    <VentaCobrada venta={cobrada} cajaId={cajaId} onListo={() => {
+      const libre = cobrada?.libre;
+      setCobrada(null);
+      if (libre) router.back();
+    }} />
+  );
+
   if (!orden) {
     return (
       <SafeAreaView style={[e.pantalla, e.centro]}>
+        {ventanaCobrada}
         <View style={e.abrir}>
           <Text style={e.titulo}>{terminal?.nombre}</Text>
           <Text style={e.suave}>Mesa libre</Text>
@@ -624,11 +637,7 @@ export default function TerminalMesa() {
         inicial={editandoExtras ? { modificadores: idsModificadores(editandoExtras.modificadores), cantidad: editandoExtras.cantidad, notas: editandoExtras.notas ?? '' } : null}
         onCerrar={() => setEditandoExtras(null)} onAgregar={guardarExtras} />
 
-      <VentaCobrada venta={cobrada} cajaId={cajaId} onListo={() => {
-        const libre = cobrada?.libre;
-        setCobrada(null);
-        if (libre) router.back();
-      }} />
+      {ventanaCobrada}
       <CobroModal visible={!!cobro} titulo={`${cobro?.titulo ?? ''}${descuento ? ` (−${descuento}%)` : ''}`} total={conDescuento(cobro?.total ?? 0)} metodos={metodos}
         cobrando={cobrando} onCerrar={() => setCobro(null)} onCobrar={cobrar} />
 

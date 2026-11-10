@@ -437,6 +437,7 @@ export interface OpcionExtra {
   id?: number; nombre: string; precio: number; activo?: boolean;
   // Cuántas veces se puede pedir en un mismo producto (Huevo extra hasta 3); 1 = se marca o no
   maximo?: number;
+  obligatorio?: boolean; exclusiva?: boolean; // siempre va / «una sola» (quita las demás del grupo)
   producto_id: number | null; insumo?: string | null; cantidad: number | null; unidad_medida_id: number | null; unidad?: string | null;
 }
 export interface GrupoExtra {
@@ -451,8 +452,9 @@ export const getGruposExtras = () => api.get<{
 }>('/mesas/config/modificadores');
 
 export const guardarGrupoExtras = (datos: {
-  nombre: string; obligatorio: boolean; multiple: boolean; activo: boolean;
-  opciones: { id?: number; nombre: string; precio: number; maximo?: number; producto_id: number | null; cantidad: number | null; unidad_medida_id: number | null }[];
+  nombre: string;
+  obligatorio: boolean; // hay que elegir al menos una opción del grupo
+  opciones: { id?: number; nombre: string; precio: number; maximo?: number; obligatorio: boolean; exclusiva: boolean; activo: boolean; producto_id: number | null; cantidad: number | null; unidad_medida_id: number | null }[];
   productos: number[];
 }, id?: number) => id ? api.put<{ message: string }>(`/mesas/config/modificadores/${id}`, datos) : api.post<{ message: string }>('/mesas/config/modificadores', datos);
 

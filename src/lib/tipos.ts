@@ -117,7 +117,8 @@ export interface GrupoModificador {
   multiple: boolean;
   // agotado: su insumo (Leche entera) ya no alcanza; no se puede elegir
   // maximo: cuántas veces se puede pedir en un mismo producto (1 = se marca o no)
-  opciones: { id: number; nombre: string; precio: number; maximo?: number; agotado?: boolean }[];
+  // obligatorio: siempre va (no se quita); exclusiva: «una sola», al elegirla se quitan las demás del grupo
+  opciones: { id: number; nombre: string; precio: number; maximo?: number; obligatorio?: boolean; exclusiva?: boolean; agotado?: boolean }[];
 }
 
 export interface ProductoMesa {
