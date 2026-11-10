@@ -58,6 +58,7 @@ function Producir({ recetaInicial }: { recetaInicial: number | null }) {
   const puedeRegistrar = puede('produccion.registrar');
 
   const [recetas, setRecetas] = useState<op.RecetaLista[]>([]);
+  const [buscar, setBuscar] = useState('');
   const [stock, setStock] = useState<Record<number, number | null>>({});
   const [receta, setReceta] = useState<op.RecetaDetalle | null>(null);
   const [fecha, setFecha] = useState(hoy());
@@ -159,6 +160,12 @@ function Producir({ recetaInicial }: { recetaInicial: number | null }) {
     }
   };
 
+  // Lo elegido nunca se esconde aunque no coincida con la búsqueda
+  const recetasVisibles = useMemo(() => {
+    const t = sinTildes(buscar.trim());
+    return t ? recetas.filter((r) => r.id === receta?.id || sinTildes(r.producto ?? '').includes(t) || sinTildes(r.nombre ?? '').includes(t)) : recetas;
+  }, [recetas, buscar, receta]);
+
   const abrir = (id: number) => op.getProduccion(id).then(setDetalle).catch((err) => avisar('No se pudo abrir', mensajeError(err)));
   const totalPeriodo = (lista ?? []).filter((p) => p.estado === 'registrada').reduce((s, p) => s + p.costo_total, 0);
 
@@ -167,13 +174,18 @@ function Producir({ recetaInicial }: { recetaInicial: number | null }) {
       {puedeRegistrar && (
         <View style={e.bloque}>
           <Text style={e.etiqueta}>¿Qué se produjo?</Text>
+          {recetas.length > 0 && (
+            <TextInput style={e.buscar} value={buscar} onChangeText={setBuscar} placeholder="Buscar producto (concha, pan...)"
+              placeholderTextColor={C.tenue} autoCorrect={false} />
+          )}
           <View style={e.opciones}>
-            {recetas.map((r) => (
+            {recetasVisibles.map((r) => (
               <Pressable key={r.id} onPress={() => elegir(receta?.id === r.id ? null : r.id)} style={[e.opcion, receta?.id === r.id && e.opcionActiva]}>
                 <Text style={[e.opcionTexto, receta?.id === r.id && { color: '#fff' }]}>{r.producto}</Text>
                 <Text style={[e.suave, receta?.id === r.id && { color: '#DBEAFE' }]}>rinde {conUnidad(r.rendimiento, r.unidad)}</Text>
               </Pressable>
             ))}
+            {recetas.length > 0 && recetasVisibles.length === 0 && <Text style={e.suave}>Ninguna receta coincide con «{buscar.trim()}».</Text>}
             {recetas.length === 0 && <Text style={e.suave}>No hay recetas de producción. Créalas en Inicio › Catálogo › Recetas (o en la web).</Text>}
           </View>
 

@@ -86,6 +86,7 @@ function FormProducto({ producto, onCerrar, onGuardado }: { producto: op.Product
     nombre: producto?.nombre ?? '', descripcion: producto?.descripcion ?? '', codigo_barras: producto?.codigo_barras ?? '',
     clase: producto?.clase ?? 'producto_terminado', se_vende: producto?.se_vende ?? true, consumo_interno: !!producto?.consumo_interno,
     controla_stock: producto?.controla_stock ?? true, permite_fraccion: producto?.permite_fraccion ?? false,
+    permite_sin_existencia: !!producto?.permite_sin_existencia,
     imprime_comanda: producto?.imprime_comanda ?? true,
     costo: producto ? String(Number(producto.costo_unitario)) : '', precio: producto ? String(Number(producto.precio_venta)) : '',
     stock_minimo: producto?.stock_minimo ? String(producto.stock_minimo) : '', color: producto?.color_pos ?? null as string | null,
@@ -120,6 +121,7 @@ function FormProducto({ producto, onCerrar, onGuardado }: { producto: op.Product
         nombre: d.nombre.trim(), descripcion: d.descripcion.trim() || null, codigo_barras: d.codigo_barras.trim() || null,
         clase: d.clase, se_vende: d.se_vende || d.consumo_interno, consumo_interno: d.consumo_interno,
         controla_stock: d.controla_stock, permite_fraccion: d.permite_fraccion, imprime_comanda: d.imprime_comanda,
+        permite_sin_existencia: d.controla_stock && d.permite_sin_existencia,
         costo_unitario: costo, precio_venta: d.consumo_interno ? 0 : precio,
         stock_minimo: Number(d.stock_minimo || 0), orden_pos: producto?.orden_pos ?? 0, color_pos: d.color,
         unidad_medida_id: d.unidad_medida_id!, categorias: d.categorias, ...(producto ? { activo: d.activo } : {}),
@@ -171,6 +173,10 @@ function FormProducto({ producto, onCerrar, onGuardado }: { producto: op.Product
         detalle={sinInventario ? 'Sin inventario propio: si tiene receta, se descuentan sus ingredientes al venderlo (bebidas, desayunos)' : 'Tiene existencia: baja al venderlo y sube al comprar o producir'} />
       <Interruptor titulo="Admite decimales" detalle="Se vende o se usa por peso o medida (1.5 lb, 250 g)" valor={d.permite_fraccion}
         onCambiar={(v) => cambiar({ permite_fraccion: v })} />
+      {d.controla_stock && (
+        <Interruptor titulo="Permitir vender sin existencia" valor={d.permite_sin_existencia} onCambiar={(v) => cambiar({ permite_sin_existencia: v })}
+          detalle="Para productos simples (Coca-Cola, golosinas): se vende aunque marque 0 y queda en negativo, aunque el negocio no permita stock negativo" />
+      )}
       <Interruptor titulo="Consumo interno" detalle="Comida del personal y cortesías: precio $0, no entra a la caja y descuenta su receta" valor={d.consumo_interno}
         onCambiar={(v) => cambiar({ consumo_interno: v })} />
       {(d.se_vende || d.consumo_interno) && (

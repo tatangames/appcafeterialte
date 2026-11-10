@@ -35,7 +35,16 @@ export interface TerminalMapa {
   } | null;
 }
 
-export interface ModificadorElegido { id: number; grupo: string; opcion: string; precio: number }
+// cantidad: cuántas veces se pidió (Huevo extra ×2); sin ella, una vez
+export interface ModificadorElegido { id: number; grupo: string; opcion: string; precio: number; cantidad?: number }
+
+// «Huevo extra ×2»
+export const textoModificador = (m: Pick<ModificadorElegido, 'opcion' | 'cantidad'>) =>
+  `${m.opcion}${(m.cantidad ?? 1) > 1 ? ` ×${m.cantidad}` : ''}`;
+
+// Ids para reenviar al servidor, repitiendo los pedidos varias veces ([7, 7] = Huevo extra ×2)
+export const idsModificadores = (lista: Pick<ModificadorElegido, 'id' | 'cantidad'>[]) =>
+  lista.flatMap((m) => Array<number>(Math.max(1, m.cantidad ?? 1)).fill(m.id));
 
 export interface ItemOrden {
   id: number;
@@ -107,7 +116,8 @@ export interface GrupoModificador {
   obligatorio: boolean;
   multiple: boolean;
   // agotado: su insumo (Leche entera) ya no alcanza; no se puede elegir
-  opciones: { id: number; nombre: string; precio: number; agotado?: boolean }[];
+  // maximo: cuántas veces se puede pedir en un mismo producto (1 = se marca o no)
+  opciones: { id: number; nombre: string; precio: number; maximo?: number; agotado?: boolean }[];
 }
 
 export interface ProductoMesa {
@@ -119,6 +129,7 @@ export interface ProductoMesa {
   imagen: string | null;
   color: string | null;
   permite_fraccion: boolean;
+  permite_sin_existencia?: boolean;
   categorias: number[];
   grupos: number[];
   stock: number | null;

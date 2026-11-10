@@ -47,7 +47,8 @@ export function VentaCobrada({ venta, cajaId, onListo, reimprimir: reimprimirLoc
   };
 
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={onListo} supportedOrientations={['portrait', 'landscape']}>
+    // El botón «atrás» de Android tampoco la cierra: solo «Listo»
+    <Modal visible transparent animationType="fade" onRequestClose={() => undefined} supportedOrientations={['portrait', 'landscape']}>
       <View style={e.velo}>
         <View style={e.ventana}>
           <Text style={[e.registrada, !venta.id && { color: C.aviso }]}>{venta.id ? `Venta ${venta.numero} registrada` : `Venta ${venta.numero} guardada sin conexión`}</Text>

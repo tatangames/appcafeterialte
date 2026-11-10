@@ -16,11 +16,21 @@ type Datos = Awaited<ReturnType<typeof op.getGruposExtras>>;
 export function ExtrasCatalogo() {
   const [datos, setDatos] = useState<Datos | null>(null);
   const [editando, setEditando] = useState<{ grupo: op.GrupoExtra | null } | null>(null);
+  const [buscar, setBuscar] = useState('');
 
   const cargar = useCallback(() => {
     op.getGruposExtras().then(setDatos).catch((err) => avisar('No se pudieron cargar los extras', mensajeError(err)));
   }, []);
   useEffect(cargar, [cargar]);
+
+  // Busca por nombre del grupo, de sus opciones o de los productos que lo usan, sin importar tildes
+  const visibles = useMemo(() => {
+    const t = sinTildes(buscar.trim());
+    const grupos = datos?.grupos ?? [];
+    if (!t) return grupos;
+    return grupos.filter((g) => [g.nombre, ...g.opciones.filter((o) => o.activo !== false).map((o) => o.nombre), ...g.productos.map((p) => p.nombre)]
+      .some((texto) => sinTildes(texto).includes(t)));
+  }, [datos, buscar]);
 
   return (
     <ScrollView contentContainerStyle={e.contenido}>
@@ -30,9 +40,14 @@ export function ExtrasCatalogo() {
         </Text>
         <Boton titulo="+ Grupo de extras" onPress={() => setEditando({ grupo: null })} />
       </View>
+      {(datos?.grupos.length ?? 0) > 0 && (
+        <TextInput style={e.buscar} value={buscar} onChangeText={setBuscar} placeholder="Buscar grupo, opción o producto (huevo, leche...)"
+          placeholderTextColor={C.tenue} autoCorrect={false} />
+      )}
       {!datos && <Text style={e.suave}>Cargando...</Text>}
       {datos?.grupos.length === 0 && <Text style={e.vacio}>Todavía no hay extras. Crea el primero, por ejemplo «Leche».</Text>}
-      {datos?.grupos.map((g) => (
+      {datos && datos.grupos.length > 0 && visibles.length === 0 && <Text style={e.vacio}>Ningún grupo coincide con «{buscar.trim()}».</Text>}
+      {visibles.map((g) => (
         <Pressable key={g.id} onPress={() => setEditando({ grupo: g })} style={({ pressed }) => [e.tarjeta, !g.activo && { opacity: 0.5 }, pressed && { opacity: 0.85 }]}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <Text style={e.titulo}>{g.nombre}</Text>
@@ -41,7 +56,7 @@ export function ExtrasCatalogo() {
             {!g.activo && <Etiqueta texto="Inactivo" fondo="#E5E7EB" color="#374151" />}
           </View>
           <Text style={e.texto}>
-            {g.opciones.filter((o) => o.activo !== false).map((o) => `${o.nombre}${o.precio > 0 ? ` +${dinero(o.precio)}` : ''}${o.insumo ? ` (${o.cantidad} ${o.unidad ?? ''} de ${o.insumo})` : ''}`).join(' · ')}
+            {g.opciones.filter((o) => o.activo !== false).map((o) => `${o.nombre}${o.precio > 0 ? ` +${dinero(o.precio)}` : ''}${(o.maximo ?? 1) > 1 ? ` hasta ${o.maximo}` : ''}${o.insumo ? ` (${o.cantidad} ${o.unidad ?? ''} de ${o.insumo})` : ''}`).join(' · ')}
           </Text>
           <Text style={e.suave}>{g.productos.length ? `En: ${g.productos.map((p) => p.nombre).join(', ')}` : 'No está asignado a ningún producto'}</Text>
         </Pressable>
@@ -51,7 +66,7 @@ export function ExtrasCatalogo() {
   );
 }
 
-interface OpcionForm { id?: number; nombre: string; precio: string; producto_id: number | null; cantidad: string; unidad_medida_id: number | null }
+interface OpcionForm { id?: number; nombre: string; precio: string; maximo: string; producto_id: number | null; cantidad: string; unidad_medida_id: number | null }
 
 // «¿Cómo funciona?» del grupo de extras (la misma explicación que la web)
 const AYUDA: { titulo: string; lineas: string[] }[] = [
@@ -79,9 +94,9 @@ function FormGrupo({ grupo, datos, onCerrar, onListo }: { grupo: op.GrupoExtra |
   const [activo, setActivo] = useState(grupo?.activo ?? true);
   const [opciones, setOpciones] = useState<OpcionForm[]>(
     grupo?.opciones.filter((o) => o.activo !== false).map((o) => ({
-      id: o.id, nombre: o.nombre, precio: o.precio ? String(o.precio) : '', producto_id: o.producto_id,
+      id: o.id, nombre: o.nombre, precio: o.precio ? String(o.precio) : '', maximo: String(o.maximo ?? 1), producto_id: o.producto_id,
       cantidad: o.cantidad ? String(o.cantidad) : '', unidad_medida_id: o.unidad_medida_id,
-    })) ?? [{ nombre: '', precio: '', producto_id: null, cantidad: '', unidad_medida_id: null }]);
+    })) ?? [{ nombre: '', precio: '', maximo: '1', producto_id: null, cantidad: '', unidad_medida_id: null }]);
   const [productos, setProductos] = useState<number[]>(grupo?.productos.map((p) => p.id) ?? []);
   const [eligiendoInsumo, setEligiendoInsumo] = useState<number | null>(null);
   const [buscarInsumo, setBuscarInsumo] = useState('');
@@ -113,6 +128,7 @@ function FormGrupo({ grupo, datos, onCerrar, onListo }: { grupo: op.GrupoExtra |
         nombre: nombre.trim(), obligatorio, multiple, activo, productos,
         opciones: opciones.map((o) => ({
           id: o.id, nombre: o.nombre.trim(), precio: Number(o.precio || 0), producto_id: o.producto_id,
+          maximo: Math.min(20, Math.max(1, Math.floor(Number(o.maximo) || 1))),
           cantidad: o.producto_id ? Number(o.cantidad) : null, unidad_medida_id: o.producto_id ? o.unidad_medida_id : null,
         })),
       }, grupo?.id);
@@ -162,6 +178,7 @@ function FormGrupo({ grupo, datos, onCerrar, onListo }: { grupo: op.GrupoExtra |
             <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-end' }}>
               <View style={{ flex: 2 }}><Campo etiqueta="Opción" value={o.nombre} onChangeText={(t) => cambiar(i, { nombre: t })} placeholder="Deslactosada" maxLength={80} /></View>
               <View style={{ flex: 1 }}><Campo etiqueta="Precio extra ($)" value={o.precio} onChangeText={(t) => cambiar(i, { precio: t.replace(/[^0-9.]/g, '') })} keyboardType="decimal-pad" placeholder="0.00" /></View>
+              <View style={{ width: 84 }}><Campo etiqueta="Máximo" value={o.maximo} onChangeText={(t) => cambiar(i, { maximo: t.replace(/[^0-9]/g, '').slice(0, 2) })} keyboardType="number-pad" placeholder="1" /></View>
               <Pressable onPress={() => setOpciones((os) => os.filter((_, j) => j !== i))} hitSlop={8} style={{ paddingBottom: 14 }}>
                 <Text style={{ color: C.peligro, fontWeight: '700' }}>Quitar</Text>
               </Pressable>
@@ -195,7 +212,8 @@ function FormGrupo({ grupo, datos, onCerrar, onListo }: { grupo: op.GrupoExtra |
           </View>
         );
       })}
-      <Boton titulo="+ Agregar opción" variante="contorno" onPress={() => setOpciones((os) => [...os, { nombre: '', precio: '', producto_id: null, cantidad: '', unidad_medida_id: null }])} />
+      <Text style={{ fontSize: 13, color: C.suave }}>Máximo: cuántas veces se puede pedir esa opción en un mismo producto (Huevo extra: 3). Con 1 solo se marca o no.</Text>
+      <Boton titulo="+ Agregar opción" variante="contorno" onPress={() => setOpciones((os) => [...os, { nombre: '', precio: '', maximo: '1', producto_id: null, cantidad: '', unidad_medida_id: null }])} />
 
       <Seccion titulo="Productos que lo usan" />
       <View style={e.chips}>

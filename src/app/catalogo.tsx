@@ -17,7 +17,7 @@ type Pestana = 'productos' | 'recetas' | 'extras' | 'categorias';
 const PESTANAS: { id: Pestana; texto: string; permisos: string[] }[] = [
   { id: 'productos', texto: 'Productos', permisos: ['productos.gestionar', 'productos.ver'] },
   { id: 'recetas', texto: 'Recetas', permisos: ['recetas.gestionar'] },
-  { id: 'extras', texto: 'Extras', permisos: ['mesas.configurar'] },
+  { id: 'extras', texto: 'Modificadores', permisos: ['mesas.configurar'] },
   { id: 'categorias', texto: 'Categorías y unidades', permisos: ['catalogos.gestionar'] },
 ];
 

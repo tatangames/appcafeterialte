@@ -25,7 +25,9 @@ function Contenido({ producto, grupos, onCerrar, onAgregar, inicial }: Props & {
   const [notas, setNotas] = useState(inicial?.notas ?? '');
 
   const suyos = useMemo(() => grupos.filter((g) => producto.grupos.includes(g.id)), [grupos, producto]);
-  const extra = suyos.flatMap((g) => g.opciones).filter((o) => elegidos.includes(o.id)).reduce((t, o) => t + o.precio, 0);
+  // Un id repetido es la opción pedida varias veces (Huevo extra ×2): cobra cada una
+  const veces = (id: number) => elegidos.filter((x) => x === id).length;
+  const extra = suyos.flatMap((g) => g.opciones).reduce((t, o) => t + o.precio * veces(o.id), 0);
   const falta = suyos.find((g) => g.obligatorio && !g.opciones.some((o) => elegidos.includes(o.id)));
 
   const tocar = (g: GrupoModificador, id: number) =>
@@ -34,6 +36,15 @@ function Contenido({ producto, grupos, onCerrar, onAgregar, inicial }: Props & {
       // En un grupo de una sola opción, elegir otra reemplaza la anterior
       const sinGrupo = g.multiple ? actual : actual.filter((x) => !g.opciones.some((o) => o.id === x));
       return [...sinGrupo, id];
+    });
+
+  // Opción con máximo (Huevo extra hasta 3): + y − cambian cuántas van
+  const cambiarVeces = (g: GrupoModificador, id: number, delta: number, maximo: number) =>
+    setElegidos((actual) => {
+      const nuevo = Math.min(maximo, Math.max(0, actual.filter((x) => x === id).length + delta));
+      // En un grupo de una sola opción, elegir esta quita las demás
+      const resto = g.multiple ? actual.filter((x) => x !== id) : actual.filter((x) => !g.opciones.some((o) => o.id === x));
+      return [...resto, ...Array<number>(nuevo).fill(id)];
     });
 
   return (
@@ -51,6 +62,23 @@ function Contenido({ producto, grupos, onCerrar, onAgregar, inicial }: Props & {
               const activo = elegidos.includes(o.id);
               // Sin existencia de su insumo no se elige (si ya venía elegida, se puede quitar)
               const agotada = !!o.agotado && !activo;
+              const maximo = Math.max(1, o.maximo ?? 1);
+              if (maximo > 1 && !agotada) {
+                const n = veces(o.id);
+                return (
+                  <View key={o.id} style={[e.opcion, e.conCantidad, n > 0 && e.opcionActiva]}>
+                    <Pressable onPress={() => n === 0 && cambiarVeces(g, o.id, 1, maximo)} style={{ flexShrink: 1 }}>
+                      <Text style={[e.opcionTexto, n > 0 && { color: '#fff' }]}>{o.nombre}</Text>
+                      <Text style={[e.suave, n > 0 && { color: '#E0F2FE' }]}>{o.precio > 0 ? `+${dinero(o.precio)} c/u · ` : ''}hasta {maximo}</Text>
+                    </Pressable>
+                    <Pressable style={[e.pasoChico, n === 0 && { opacity: 0.35 }]} disabled={n === 0} onPress={() => cambiarVeces(g, o.id, -1, maximo)}
+                      accessibilityLabel={`Quitar ${o.nombre}`}><Text style={e.pasoTexto}>−</Text></Pressable>
+                    <Text style={[e.numeroChico, n > 0 && { color: '#fff' }]}>{n}</Text>
+                    <Pressable style={[e.pasoChico, n >= maximo && { opacity: 0.35 }]} disabled={n >= maximo} onPress={() => cambiarVeces(g, o.id, 1, maximo)}
+                      accessibilityLabel={`Agregar ${o.nombre}`}><Text style={e.pasoTexto}>+</Text></Pressable>
+                  </View>
+                );
+              }
               return (
                 <Pressable key={o.id} onPress={() => !agotada && tocar(g, o.id)} disabled={agotada}
                   style={[e.opcion, activo && e.opcionActiva, agotada && e.opcionAgotada]}>
@@ -89,4 +117,7 @@ const e = StyleSheet.create({
   paso: { width: 52, height: 52, borderRadius: radio, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' },
   pasoTexto: { fontSize: 26, fontWeight: '600', color: C.texto },
   numero: { fontSize: 22, fontWeight: '700', minWidth: 36, textAlign: 'center', color: C.texto },
+  conCantidad: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6 },
+  pasoChico: { width: 40, height: 40, borderRadius: radio, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' },
+  numeroChico: { fontSize: 18, fontWeight: '700', minWidth: 22, textAlign: 'center', color: C.texto },
 });

@@ -13,6 +13,8 @@ const consulta = (filtros: Record<string, string | number | undefined | null>) =
 export interface ProductoPos {
   id: number; nombre: string; sku: string | null; codigo_barras: string | null; precio: number; color: string | null;
   categorias: number[]; unidad: string | null; permite_fraccion: boolean; controla_stock: boolean;
+  // Lleva inventario pero se vende aunque no haya existencia (Coca-Cola)
+  permite_sin_existencia?: boolean;
   consumo_interno: boolean; area: string | null; stock: number | null; bajo_minimo: boolean;
   grupos: number[]; receta: IngredienteReceta[];
   alcanza?: number | null; // platos con receta: cuántos alcanzan con los insumos (null = sin límite)
@@ -402,6 +404,7 @@ export interface ProductoTabla {
 export interface ProductoEditar {
   id: number; sku: string | null; codigo_barras: string | null; nombre: string; descripcion: string | null; clase: string;
   se_vende: boolean; consumo_interno: boolean; controla_stock: boolean; permite_fraccion: boolean; imprime_comanda?: boolean;
+  permite_sin_existencia?: boolean;
   costo_unitario: number | string; precio_venta: number | string; stock_actual: number; stock_minimo: number;
   orden_pos: number; color_pos: string | null; unidad_medida_id: number; activo: boolean; categorias: number[];
 }
@@ -409,6 +412,7 @@ export interface ProductoEditar {
 export interface ProductoGuardar {
   nombre: string; descripcion: string | null; codigo_barras: string | null; clase: string; se_vende: boolean; consumo_interno: boolean;
   controla_stock: boolean; permite_fraccion: boolean; imprime_comanda: boolean; costo_unitario: number; precio_venta: number; stock_minimo: number;
+  permite_sin_existencia: boolean;
   orden_pos: number; color_pos: string | null; unidad_medida_id: number; categorias: number[]; activo?: boolean;
 }
 
@@ -431,6 +435,8 @@ export const guardarUnidad = (datos: { nombre: string; abreviatura: string | nul
 // Extras (grupos de modificadores): Leche, Endulzante... con su precio y el insumo que descuentan
 export interface OpcionExtra {
   id?: number; nombre: string; precio: number; activo?: boolean;
+  // Cuántas veces se puede pedir en un mismo producto (Huevo extra hasta 3); 1 = se marca o no
+  maximo?: number;
   producto_id: number | null; insumo?: string | null; cantidad: number | null; unidad_medida_id: number | null; unidad?: string | null;
 }
 export interface GrupoExtra {
@@ -446,7 +452,7 @@ export const getGruposExtras = () => api.get<{
 
 export const guardarGrupoExtras = (datos: {
   nombre: string; obligatorio: boolean; multiple: boolean; activo: boolean;
-  opciones: { id?: number; nombre: string; precio: number; producto_id: number | null; cantidad: number | null; unidad_medida_id: number | null }[];
+  opciones: { id?: number; nombre: string; precio: number; maximo?: number; producto_id: number | null; cantidad: number | null; unidad_medida_id: number | null }[];
   productos: number[];
 }, id?: number) => id ? api.put<{ message: string }>(`/mesas/config/modificadores/${id}`, datos) : api.post<{ message: string }>('/mesas/config/modificadores', datos);
 

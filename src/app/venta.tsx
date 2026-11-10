@@ -149,7 +149,7 @@ export default function VentaRapida() {
       const recuperadas = guardadas.flatMap(({ producto_id, ...l }) => {
         const producto = catalogo.productos.find((p) => p.id === producto_id);
         if (!producto) return [];
-        const extra = opciones.filter((o) => l.modificadores.includes(o.id)).reduce((t, o) => t + o.precio, 0);
+        const extra = opciones.reduce((t, o) => t + o.precio * l.modificadores.filter((id) => id === o.id).length, 0);
         return [{ ...l, producto, precio: Math.round((producto.precio + extra) * 100) / 100 }];
       });
       setLineas((actuales) => (actuales.length ? actuales : recuperadas));
@@ -202,7 +202,9 @@ export default function VentaRapida() {
 
   // Sin stock negativo (Datos del negocio) no se agrega más de lo que hay: la existencia del
   // producto o, si sale de su receta, los platos que alcanzan con sus insumos
-  const limite = (p: op.ProductoPos): number | null => (p.controla_stock ? (p.stock ?? 0) : (p.alcanza ?? null));
+  // «Permitir vender sin existencia» (Coca-Cola): sin límite aunque marque 0
+  const limite = (p: op.ProductoPos): number | null =>
+    (p.permite_sin_existencia ? null : p.controla_stock ? (p.stock ?? 0) : (p.alcanza ?? null));
   const sinLimite = (p: op.ProductoPos) => limite(p) === null || catalogo?.permitir_stock_negativo !== false;
   const agotado = (p: op.ProductoPos) => !sinLimite(p) && (limite(p) ?? 0) <= 0;
   const cabe = (p: op.ProductoPos, nuevo: number, sinContar?: string) => {
@@ -249,11 +251,13 @@ export default function VentaRapida() {
     setEditando(null);
     if (!p || !cabe(p, item.cantidad, previa?.clave)) return;
     const mods = item.modificadores ?? [];
-    const opciones = (catalogo?.grupos ?? []).flatMap((g) => g.opciones).filter((o) => mods.includes(o.id));
+    // Un id repetido es la opción pedida varias veces: cobra cada una y se muestra «Huevo extra ×2»
+    const opciones = (catalogo?.grupos ?? []).flatMap((g) => g.opciones)
+      .map((o) => ({ ...o, veces: mods.filter((id) => id === o.id).length })).filter((o) => o.veces > 0);
     const datos = {
       cantidad: item.cantidad, modificadores: mods, notas: item.notas,
-      precio: Math.round((p.precio + opciones.reduce((t, o) => t + o.precio, 0)) * 100) / 100,
-      extras: opciones.map((o) => o.nombre),
+      precio: Math.round((p.precio + opciones.reduce((t, o) => t + o.precio * o.veces, 0)) * 100) / 100,
+      extras: opciones.map((o) => `${o.nombre}${o.veces > 1 ? ` ×${o.veces}` : ''}`),
     };
     if (previa) {
       // Se conservan los ingredientes cambiados; si queda como el producto normal, vuelve a juntarse

@@ -14,7 +14,7 @@ import { avisar, confirmar } from '@/lib/aviso';
 import { cantidad, dinero, hora, nuevoUuid, transcurrido } from '@/lib/formato';
 import * as srv from '@/lib/servicios';
 import { useSesion } from '@/lib/sesion';
-import { CatalogoMesas, Comanda, ESTADOS_ITEM, ItemNuevo, ItemOrden, MetodoPago, Orden, ProductoMesa, TerminalMapa } from '@/lib/tipos';
+import { CatalogoMesas, Comanda, ESTADOS_ITEM, ItemNuevo, ItemOrden, MetodoPago, Orden, ProductoMesa, TerminalMapa, idsModificadores, textoModificador } from '@/lib/tipos';
 import { sinTildes } from '@/lib/texto';
 
 // El catálogo cambia poco: se guarda entre mesas y se refresca al entrar
@@ -199,7 +199,7 @@ export default function TerminalMesa() {
 
   // Sin stock negativo (Datos del negocio) la tarjeta dice «Agotado», pero se puede agregar igual:
   // el servidor avisa si no alcanza (contando lo de cuentas abiertas) y el cobro es el que lo exige
-  const agotado = (p: ProductoMesa) => catalogo?.permitir_stock_negativo === false
+  const agotado = (p: ProductoMesa) => catalogo?.permitir_stock_negativo === false && !p.permite_sin_existencia
     && ((p.disponible != null && p.disponible <= 0) || (p.alcanza != null && p.alcanza <= 0));
 
   // Tocar agrega uno; los que llevan extras (o al dejar presionado) abren la ventana
@@ -525,7 +525,7 @@ export default function TerminalMesa() {
             <Pressable onPress={() => alternar(i)} style={[e.linea, elegido && e.lineaElegida, i.pagado && { opacity: 0.5 }]}>
               <View style={{ flex: 1, gap: 4 }}>
                 <Text style={e.lineaNombre}>{cantidad(i.cantidad)} × {i.nombre}</Text>
-                {i.modificadores.length > 0 && <Text style={e.suave}>{i.modificadores.map((m) => `+ ${m.opcion}`).join(' · ')}</Text>}
+                {i.modificadores.length > 0 && <Text style={e.suave}>{i.modificadores.map((m) => `+ ${textoModificador(m)}`).join(' · ')}</Text>}
                 {(i.texto_ajustes ?? []).length > 0 && <Text style={e.ajuste}>{i.texto_ajustes.map((t) => `! ${t}`).join(' · ')}</Text>}
                 {i.notas ? <Text style={e.nota}>“{i.notas}”</Text> : null}
                 <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -621,7 +621,7 @@ export default function TerminalMesa() {
 
       <ModificadoresModal producto={conExtras} grupos={catalogo?.grupos ?? []} onCerrar={() => setConExtras(null)} onAgregar={agregar} />
       <ModificadoresModal producto={editandoExtras ? productoDe(editandoExtras.producto_id) : null} grupos={catalogo?.grupos ?? []}
-        inicial={editandoExtras ? { modificadores: editandoExtras.modificadores.map((m) => m.id), cantidad: editandoExtras.cantidad, notas: editandoExtras.notas ?? '' } : null}
+        inicial={editandoExtras ? { modificadores: idsModificadores(editandoExtras.modificadores), cantidad: editandoExtras.cantidad, notas: editandoExtras.notas ?? '' } : null}
         onCerrar={() => setEditandoExtras(null)} onAgregar={guardarExtras} />
 
       <VentaCobrada venta={cobrada} cajaId={cajaId} onListo={() => {
