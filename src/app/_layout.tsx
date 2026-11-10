@@ -1,4 +1,4 @@
-import { Stack } from 'expo-router';
+import { router, Stack, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
@@ -14,13 +14,24 @@ import { SesionProvider, useSesion } from '@/lib/sesion';
 
 SplashScreen.preventAutoHideAsync();
 
+// Pantallas que se pueden ver sin sesión
+const SIN_SESION = ['login', 'servidor', 'index'];
+
 function Navegacion() {
-  const { listo } = useSesion();
+  const { listo, usuario } = useSesion();
+  const segmentos = useSegments();
+  const pantalla = segmentos[0] ?? 'index';
 
   // La pantalla de inicio se quita cuando ya se leyó la sesión guardada
   useEffect(() => {
     if (listo) SplashScreen.hideAsync();
   }, [listo]);
+
+  // Sin sesión (salió desde el bloqueo, venció el token...) nunca se queda en una pantalla
+  // interna vacía: se va al inicio de sesión
+  useEffect(() => {
+    if (listo && !usuario && !SIN_SESION.includes(pantalla)) router.replace('/login');
+  }, [listo, usuario, pantalla]);
 
   if (!listo) return null;
 

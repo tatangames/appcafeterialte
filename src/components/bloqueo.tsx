@@ -119,7 +119,7 @@ function Contenido() {
             <Text style={e.enlace}>{conContrasena ? 'Usar PIN' : `Soy ${usuario.nombre}: usar mi contraseña`}</Text>
           </Pressable>
           <Text style={e.nota}>¿Sin PIN o lo olvidaste? Entra con tu correo y contraseña y créalo en «Crear PIN».</Text>
-          <Pressable onPress={() => { salir(); }} hitSlop={8}>
+          <Pressable onPress={async () => { await salir(); router.replace('/login'); }} hitSlop={8}>
             <Text style={e.salir}>Entrar con correo y contraseña</Text>
           </Pressable>
         </View>
