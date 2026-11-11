@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AvisosAgregado, useAvisosAgregado } from '@/components/avisosAgregado';
 import { CobroModal, Pago } from '@/components/cobro';
 import { IngredientesModal } from '@/components/ingredientes';
 import { ModificadoresModal } from '@/components/modificadores';
@@ -69,8 +70,10 @@ export default function TerminalMesa() {
   const [mas, setMas] = useState(false);
   const [renombrando, setRenombrando] = useState<{ id: number; nombre: string } | null>(null);
   // Aviso breve al agregar («✓ Americano agregado a Ticket 1») para no tener que ir a la cuenta
-  const [agregado, setAgregado] = useState<string | null>(null);
-  const avisoAgregado = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const agregados = useAvisosAgregado();
+  // Lo tocado mientras el servidor responde se junta y se manda después: no hay que esperar
+  const porAgregar = useRef<{ item: ItemNuevo; ticketId: number | null }[]>([]);
+  const agregando = useRef(false);
   const [ahora, setAhora] = useState(() => Date.now());
 
   const aplicar = useCallback((o: Orden | null) => {
@@ -163,13 +166,26 @@ export default function TerminalMesa() {
   const agregar = async (item: ItemNuevo) => {
     if (!orden) return;
     setConExtras(null);
-    const res = await hacer(() => srv.agregarItems(orden.id, [item], ticketId));
-    if (!res) return;
-    const nombre = catalogo?.productos.find((p) => p.id === item.producto_id)?.nombre ?? 'Producto';
-    const cuenta = res.orden?.tickets.find((t) => t.id === ticketId)?.nombre ?? 'la cuenta';
-    if (avisoAgregado.current) clearTimeout(avisoAgregado.current);
-    setAgregado(`✓ ${cantidad(item.cantidad)} × ${nombre} agregado a ${cuenta}`);
-    avisoAgregado.current = setTimeout(() => setAgregado(null), 2200);
+    porAgregar.current.push({ item, ticketId });
+    if (agregando.current) return; // ya hay un envío en curso: al terminar manda lo que se juntó
+    agregando.current = true;
+    try {
+      while (porAgregar.current.length) {
+        // Un envío por cuenta: si cambiaron de cuenta a medio camino, lo demás va en el siguiente
+        const cuentaId = porAgregar.current[0].ticketId;
+        const corte = porAgregar.current.findIndex((x) => x.ticketId !== cuentaId);
+        const lote = porAgregar.current.splice(0, corte === -1 ? porAgregar.current.length : corte).map((x) => x.item);
+        const res = await hacer(() => srv.agregarItems(orden.id, lote, cuentaId));
+        if (!res) { porAgregar.current = []; break; }
+        const cuenta = res.orden?.tickets.find((t) => t.id === cuentaId)?.nombre ?? 'la cuenta';
+        lote.forEach((i) => {
+          const nombre = catalogo?.productos.find((p) => p.id === i.producto_id)?.nombre ?? 'Producto';
+          agregados.mostrar(`✓ ${cantidad(i.cantidad)} × ${nombre} agregado a ${cuenta}`);
+        });
+      }
+    } finally {
+      agregando.current = false;
+    }
   };
 
   const renombrar = async () => {
@@ -197,14 +213,15 @@ export default function TerminalMesa() {
     await hacer(() => srv.eliminarTicket(t.id), true);
   };
 
-  // Sin stock negativo (Datos del negocio) la tarjeta dice «Agotado», pero se puede agregar igual:
-  // el servidor avisa si no alcanza (contando lo de cuentas abiertas) y el cobro es el que lo exige
+  // Sin stock negativo (Datos del negocio) lo que dice «Agotado» no se puede agregar. Si queda
+  // poco, el servidor igual avisa cuando no alcanza (contando lo de cuentas abiertas)
   const agotado = (p: ProductoMesa) => catalogo?.permitir_stock_negativo === false && !p.permite_sin_existencia
     && ((p.disponible != null && p.disponible <= 0) || (p.alcanza != null && p.alcanza <= 0));
 
   // Tocar agrega uno; los que llevan extras (o al dejar presionado) abren la ventana
   const tocarProducto = (p: ProductoMesa, largo = false) => {
     if (pagadaVista) return avisar(`${pagadaVista.nombre} ya está pagada`, 'Toca una cuenta abierta (azul) o «+ Cuenta» para agregar productos.');
+    if (agotado(p)) return avisar(`${p.nombre} está agotado`, 'Primero hay que registrar la producción, la compra o ajustar el inventario.');
     if (p.grupos.length > 0 || largo) setConExtras(p);
     else agregar({ producto_id: p.id, cantidad: 1 });
   };
@@ -469,7 +486,7 @@ export default function TerminalMesa() {
           contentContainerStyle={{ gap: 10, paddingBottom: 24 }}
           ListEmptyComponent={<Text style={e.suave}>Sin productos</Text>}
           renderItem={({ item: p }) => (
-            <Pressable onPress={() => tocarProducto(p)} onLongPress={() => tocarProducto(p, true)} disabled={ocupado}
+            <Pressable onPress={() => tocarProducto(p)} onLongPress={() => tocarProducto(p, true)}
               style={({ pressed }) => [e.producto, { maxWidth: ancho ? '32%' : '49%', borderTopColor: p.color ?? C.libre, opacity: agotado(p) ? 0.45 : pressed ? 0.7 : 1 }]}>
               <Text style={e.productoNombre} numberOfLines={2}>{p.nombre}</Text>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
@@ -623,12 +640,8 @@ export default function TerminalMesa() {
       <View style={[e.cuerpo, ancho && { flexDirection: 'row' }]}>
         {(ancho || vista === 'productos') && <View style={{ flex: ancho ? 3 : 1 }}>{panelProductos}</View>}
         {(ancho || vista === 'cuenta') && <View style={{ flex: ancho ? 2 : 1 }}>{panelCuenta}</View>}
-        {agregado && (
-          <Pressable onPress={() => { setAgregado(null); if (!ancho) setVista('cuenta'); }} style={e.agregado}>
-            <Text style={e.agregadoTexto}>{agregado}</Text>
-            {!ancho && <Text style={e.agregadoVer}>Ver cuenta ›</Text>}
-          </Pressable>
-        )}
+        <AvisosAgregado avisos={agregados.avisos} ancho={ancho} verTexto="Ver cuenta ›"
+          onVer={() => { agregados.limpiar(); setVista('cuenta'); }} />
       </View>
 
 
@@ -837,8 +850,4 @@ const e = StyleSheet.create({
   acciones: { flexDirection: 'row', gap: 8 },
   comanda: { borderWidth: 1, borderColor: C.borde, borderLeftWidth: 5, borderRadius: radio, padding: 12, gap: 6 },
   comandaItem: { fontSize: 15, color: C.texto },
-  agregado: { position: 'absolute', left: 16, right: 16, bottom: 16, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 14,
-    borderRadius: radio, backgroundColor: C.exito, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 8, elevation: 6 },
-  agregadoTexto: { flex: 1, color: '#fff', fontSize: 16, fontWeight: '700' },
-  agregadoVer: { color: '#fff', fontSize: 15, fontWeight: '800' },
 });

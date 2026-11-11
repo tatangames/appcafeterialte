@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AvisosAgregado, useAvisosAgregado } from '@/components/avisosAgregado';
 import { CobroModal, Pago } from '@/components/cobro';
 import { Encabezado } from '@/components/encabezado';
 import { IngredientesModal } from '@/components/ingredientes';
@@ -221,14 +222,9 @@ export default function VentaRapida() {
   };
 
   // Aviso breve al agregar («✓ 1 × Americano agregado a la venta») para no tener que ir a la pestaña Venta
-  const [agregado, setAgregado] = useState<string | null>(null);
-  const avisoAgregado = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const avisarAgregado = (p: op.ProductoPos, n: number) => {
-    if (avisoAgregado.current) clearTimeout(avisoAgregado.current);
-    setAgregado(`✓ ${cantidad(n)} × ${p.nombre} agregado ${agregandoA ? `al pedido de ${agregandoA.nombre}` : 'a la venta'}`);
-    avisoAgregado.current = setTimeout(() => setAgregado(null), 2200);
-  };
-  useEffect(() => () => { if (avisoAgregado.current) clearTimeout(avisoAgregado.current); }, []);
+  const agregados = useAvisosAgregado();
+  const avisarAgregado = (p: op.ProductoPos, n: number) =>
+    agregados.mostrar(`✓ ${cantidad(n)} × ${p.nombre} agregado ${agregandoA ? `al pedido de ${agregandoA.nombre}` : 'a la venta'}`);
 
   const sumarSimple = (p: op.ProductoPos, n: number) => setLineas((ls) => {
     const existe = ls.find((l) => l.clave === simple(p));
@@ -577,12 +573,8 @@ export default function VentaRapida() {
       <View style={[e.cuerpo, ancho && { flexDirection: 'row' }]}>
         {(ancho || vista === 'productos') && <View style={{ flex: ancho ? 3 : 1 }}>{panelProductos}</View>}
         {(ancho || vista === 'carrito') && <View style={{ flex: ancho ? 2 : 1 }}>{panelCarrito}</View>}
-        {agregado && (
-          <Pressable onPress={() => { setAgregado(null); if (!ancho) setVista('carrito'); }} style={e.agregado}>
-            <Text style={e.agregadoTexto}>{agregado}</Text>
-            {!ancho && <Text style={e.agregadoVer}>Ver venta ›</Text>}
-          </Pressable>
-        )}
+        <AvisosAgregado avisos={agregados.avisos} ancho={ancho} verTexto="Ver venta ›"
+          onVer={() => { agregados.limpiar(); setVista('carrito'); }} />
       </View>
 
       <VentaCobrada venta={cobrada} cajaId={cajaId} onListo={() => setCobrada(null)}
@@ -640,10 +632,6 @@ export default function VentaRapida() {
 const e = StyleSheet.create({
   pantalla: { flex: 1, backgroundColor: C.fondo },
   cuerpo: { flex: 1, gap: 12, padding: 12 },
-  agregado: { position: 'absolute', left: 16, right: 16, bottom: 16, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 14,
-    borderRadius: radio, backgroundColor: C.exito, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 8, elevation: 6 },
-  agregadoTexto: { flex: 1, color: '#fff', fontSize: 16, fontWeight: '700' },
-  agregadoVer: { color: '#fff', fontSize: 15, fontWeight: '800' },
   suave: { fontSize: 13, color: C.suave },
   subtitulo: { fontSize: 17, fontWeight: '700', color: C.texto },
   buscar: { height: 48, borderWidth: 1, borderColor: '#D1D5DB', borderRadius: radio, paddingHorizontal: 14, fontSize: 16, backgroundColor: '#fff', color: C.texto },
