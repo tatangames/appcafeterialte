@@ -1,4 +1,6 @@
-// Extras (grupos de modificadores): Leche, Endulzante... cada opción con su precio y el insumo que descuenta
+// Extras (modificadores) en tarjetas, como en las apps de delivery: una tarjeta («Bebidas con leche»)
+// tiene sus bloques en orden (Tipo de leche, Azúcar, Extras), cada uno requerido u opcional con
+// mínimo y máximo, y sus opciones con precio e insumo. Cada producto lleva una sola tarjeta.
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -6,17 +8,48 @@ import { Interruptor, Opciones, Seccion } from '@/components/formulario';
 import { Boton, Campo, Etiqueta, Ventana } from '@/components/ui';
 import { C, radio } from '@/constants/colores';
 import { mensajeError } from '@/lib/api';
-import { avisar } from '@/lib/aviso';
+import { avisar, confirmar } from '@/lib/aviso';
 import { dinero } from '@/lib/formato';
 import * as op from '@/lib/operaciones';
 import { minimoDe, reglaTexto } from '@/lib/modificadores';
 import { sinTildes } from '@/lib/texto';
 
-type Datos = Awaited<ReturnType<typeof op.getGruposExtras>>;
+export type DatosExtras = Awaited<ReturnType<typeof op.getGruposExtras>>;
+
+/** «Requerido · elige 1» u «Opcional · máximo 2». */
+export function EtiquetaRegla({ grupo }: { grupo: { minimo?: number; maximo?: number | null; obligatorio?: boolean } }) {
+  const requerido = minimoDe(grupo) > 0;
+  const regla = reglaTexto(grupo);
+  return <Etiqueta texto={`${requerido ? 'Requerido' : 'Opcional'}${regla ? ` · ${regla}` : ''}`}
+    fondo={requerido ? '#FEE2E2' : '#F3F4F6'} color={requerido ? '#991B1B' : '#374151'} />;
+}
+
+/** Los bloques de una tarjeta, numerados y con sus opciones, como los verá el mesero. */
+export function VistaTarjeta({ conjunto }: { conjunto: op.ConjuntoExtra }) {
+  return (
+    <View style={{ gap: 10 }}>
+      {conjunto.bloques.map((g, n) => (
+        <View key={g.id} style={{ gap: 4 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <Text style={e.bloqueTitulo}>{n + 1}. {g.nombre}</Text>
+            <EtiquetaRegla grupo={g} />
+          </View>
+          {g.opciones.filter((o) => o.activo !== false).map((o) => (
+            <Text key={o.id} style={e.texto}>
+              ○ {o.nombre}{o.precio > 0 ? ` (+${dinero(o.precio)})` : ''}{(o.maximo ?? 1) > 1 ? ` · hasta ${o.maximo}` : ''}
+              {o.insumo ? <Text style={e.suave}>{`  descuenta ${o.cantidad} ${o.unidad ?? ''} de ${o.insumo}`}</Text> : null}
+            </Text>
+          ))}
+        </View>
+      ))}
+    </View>
+  );
+}
 
 export function ExtrasCatalogo() {
-  const [datos, setDatos] = useState<Datos | null>(null);
-  const [editando, setEditando] = useState<{ grupo: op.GrupoExtra | null } | null>(null);
+  const [datos, setDatos] = useState<DatosExtras | null>(null);
+  // undefined: cerrado; null: tarjeta nueva
+  const [editando, setEditando] = useState<op.ConjuntoExtra | null | undefined>(undefined);
   const [buscar, setBuscar] = useState('');
 
   const cargar = useCallback(() => {
@@ -24,52 +57,54 @@ export function ExtrasCatalogo() {
   }, []);
   useEffect(cargar, [cargar]);
 
-  // Busca por nombre del grupo, de sus opciones o de los productos que lo usan, sin importar tildes
+  // Busca por tarjeta, bloque, opción o producto, sin importar tildes
   const visibles = useMemo(() => {
     const t = sinTildes(buscar.trim());
-    const grupos = datos?.grupos ?? [];
-    if (!t) return grupos;
-    return grupos.filter((g) => [g.nombre, ...g.opciones.filter((o) => o.activo !== false).map((o) => o.nombre), ...g.productos.map((p) => p.nombre)]
+    const lista = datos?.conjuntos ?? [];
+    if (!t) return lista;
+    return lista.filter((c) => [c.nombre, ...c.bloques.flatMap((b) => [b.nombre, ...b.opciones.map((o) => o.nombre)]), ...c.productos.map((p) => p.nombre)]
       .some((texto) => sinTildes(texto).includes(t)));
   }, [datos, buscar]);
+
+  const borrar = async (c: op.ConjuntoExtra) => {
+    if (!(await confirmar(`¿Borrar «${c.nombre}»?`, c.productos.length ? `Quedan sin extras: ${c.productos.map((p) => p.nombre).join(', ')}. Las ventas anteriores no cambian.` : 'No está en ningún producto.', 'Borrar'))) return;
+    try {
+      avisar((await op.borrarConjuntoExtras(c.id)).message);
+      cargar();
+    } catch (err) {
+      avisar('No se pudo borrar', mensajeError(err));
+    }
+  };
 
   return (
     <ScrollView contentContainerStyle={e.contenido}>
       <View style={e.cabecera}>
         <Text style={[e.suave, { flex: 1 }]}>
-          Opciones que se eligen al tocar un producto (tipo de leche, endulzante, saborizante). Pueden subir el precio y descontar un insumo del inventario.
+          Cada tarjeta junta lo que se elige al vender un producto (tipo de leche, azúcar, extras), en bloques. Un producto lleva una sola tarjeta.
         </Text>
-        <Boton titulo="+ Grupo de extras" onPress={() => setEditando({ grupo: null })} />
+        <Boton titulo="+ Tarjeta" onPress={() => setEditando(null)} />
       </View>
-      {(datos?.grupos.length ?? 0) > 0 && (
-        <TextInput style={e.buscar} value={buscar} onChangeText={setBuscar} placeholder="Buscar grupo, opción o producto (huevo, leche...)"
+      {(datos?.conjuntos.length ?? 0) > 0 && (
+        <TextInput style={e.buscar} value={buscar} onChangeText={setBuscar} placeholder="Buscar tarjeta, bloque, opción o producto"
           placeholderTextColor={C.tenue} autoCorrect={false} />
       )}
       {!datos && <Text style={e.suave}>Cargando...</Text>}
-      {datos?.grupos.length === 0 && <Text style={e.vacio}>Todavía no hay extras. Crea el primero, por ejemplo «Leche».</Text>}
-      {datos && datos.grupos.length > 0 && visibles.length === 0 && <Text style={e.vacio}>Ningún grupo coincide con «{buscar.trim()}».</Text>}
-      {visibles.map((g) => (
-        <Pressable key={g.id} onPress={() => setEditando({ grupo: g })} style={({ pressed }) => [e.tarjeta, pressed && { opacity: 0.85 }]}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <Text style={e.titulo}>{g.nombre}</Text>
-            {!!reglaTexto(g) && <Etiqueta texto={reglaTexto(g).replace(/^./, (c) => c.toUpperCase())} fondo="#FEF3C7" color="#92400E" />}
+      {datos?.conjuntos.length === 0 && <Text style={e.vacio}>Todavía no hay extras. Crea una tarjeta, por ejemplo «Bebidas con leche».</Text>}
+      {datos && datos.conjuntos.length > 0 && visibles.length === 0 && <Text style={e.vacio}>Ninguna tarjeta coincide con «{buscar.trim()}».</Text>}
+      {visibles.map((c) => (
+        <View key={c.id} style={e.tarjeta}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Text style={[e.titulo, { flex: 1 }]}>{c.nombre}</Text>
+            <Boton titulo="Editar" variante="contorno" chico onPress={() => setEditando(c)} />
+            <Boton titulo="Borrar" variante="contorno" chico onPress={() => borrar(c)} />
           </View>
-          <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
-            {g.opciones.map((o) => (
-              <View key={o.id} style={[e.chipOpcion, o.activo === false && { opacity: 0.45 }]}>
-                <Text style={[e.texto, o.activo === false && { textDecorationLine: 'line-through' }]}>
-                  {o.nombre}{o.precio > 0 ? ` +${dinero(o.precio)}` : ''}{(o.maximo ?? 1) > 1 ? ` · hasta ${o.maximo}` : ''}{o.insumo ? ` (${o.cantidad} ${o.unidad ?? ''} de ${o.insumo})` : ''}
-                </Text>
-                {o.obligatorio && <Etiqueta texto="Obligatorio" fondo="#FEF3C7" color="#92400E" />}
-                {o.exclusiva && <Etiqueta texto="Una sola" fondo="#E0F2FE" color="#075985" />}
-                {o.activo === false && <Etiqueta texto="Apagada" fondo="#E5E7EB" color="#374151" />}
-              </View>
-            ))}
-          </View>
-          <Text style={e.suave}>{g.productos.length ? `En: ${g.productos.map((p) => p.nombre).join(', ')}` : 'No está asignado a ningún producto'}</Text>
-        </Pressable>
+          <VistaTarjeta conjunto={c} />
+          <Text style={e.suave}>{c.productos.length ? `En: ${c.productos.map((p) => p.nombre).join(', ')}` : 'No está asignada a ningún producto'}</Text>
+        </View>
       ))}
-      {editando && datos && <FormGrupo grupo={editando.grupo} datos={datos} onCerrar={() => setEditando(null)} onListo={() => { setEditando(null); cargar(); }} />}
+      {editando !== undefined && datos && (
+        <FormConjunto conjunto={editando} datos={datos} onCerrar={() => setEditando(undefined)} onListo={() => { setEditando(undefined); cargar(); }} />
+      )}
     </ScrollView>
   );
 }
@@ -78,84 +113,93 @@ interface OpcionForm {
   id?: number; nombre: string; precio: string; maximo: string; obligatorio: boolean; exclusiva: boolean; activo: boolean;
   producto_id: number | null; cantidad: string; unidad_medida_id: number | null;
 }
-const opcionVacia = (): OpcionForm => ({ nombre: '', precio: '', maximo: '1', obligatorio: false, exclusiva: false, activo: true, producto_id: null, cantidad: '', unidad_medida_id: null });
+interface BloqueForm { clave: string; id?: number; nombre: string; minimo: string; maximo: string; opciones: OpcionForm[] }
 
-// «¿Cómo funciona?» del grupo de extras (la misma explicación que la web)
-const AYUDA: { titulo: string; lineas: string[] }[] = [
-  { titulo: 'Nombre', lineas: ['Corto, porque es lo que ve el mesero: «Salsa», «Leche», «Huevos». El producto al que aplica se elige abajo, en Productos (no hace falta escribirlo en el nombre).'] },
-  { titulo: 'Casillas de cada opción', lineas: [
-    'Obligatorio: la opción siempre va marcada y no se puede quitar (si tiene máximo, se puede subir). Ej.: «Tortillas» del desayuno.',
-    'Una sola: al elegirla se quitan las demás opciones del grupo, y al elegir otra se quita ella. Ej.: «Sin azúcar» quita «Azúcar extra». Si todas son «una sola», solo se elige una (Estrellados, Revueltos o Picados).',
-    'Mínimo y máximo (del grupo): cuántas opciones se eligen en total, contando cada vez que se repite una. Ej.: «Huevos» mínimo 1; «Tipo de leche» mínimo 1, máximo 2. Con mínimo no deja agregar el producto hasta completarlo; con máximo no deja pasarse.',
-    'Activa: apagada no sale al vender, pero se conserva (un sabor que se acabó por temporada).',
-  ] },
-  { titulo: 'Precio extra', lineas: [
-    'Lo que se suma al precio del producto si el cliente elige esa opción. Waffle $2.75 + Nutella (+$0.50) = $3.25.',
-    'En blanco o $0.00: la opción es gratis, el precio no cambia. Sirve para opciones que ya van incluidas o que solo son instrucciones («Sin azúcar», «Revueltos»).',
-  ] },
-  { titulo: 'Insumo, cantidad y unidad', lineas: [
-    'Lo que se descuenta del inventario cada vez que se vende el producto con esa opción. Nutella, 30 g: se vende un waffle con Nutella y bajan 30 g de Nutella.',
-    'Aunque la opción sea gratis, el insumo se descuenta igual y su costo se suma al costo de la venta (así la utilidad es real). Si el insumo se acaba, la opción sale «Agotado» cuando no se permite stock negativo.',
-    'Sin insumo: para instrucciones que no gastan nada.',
-  ] },
-  { titulo: 'Ejemplo: grupo «Salsa» para el Waffle', lineas: ['Opcional, una sola opción. Nutella +$0.50, insumo Nutella 30 g · Caramelo +$0.50, insumo Caramelo 30 g · Sin salsa (en blanco), sin insumo.'] },
+const opcionVacia = (): OpcionForm => ({ nombre: '', precio: '', maximo: '1', obligatorio: false, exclusiva: false, activo: true, producto_id: null, cantidad: '', unidad_medida_id: null });
+let siguiente = 0;
+const bloqueVacio = (): BloqueForm => ({ clave: `n${++siguiente}`, nombre: '', minimo: '', maximo: '', opciones: [opcionVacia()] });
+
+const aBloques = (c: op.ConjuntoExtra | null): BloqueForm[] => c ? c.bloques.map((g) => ({
+  clave: `g${g.id}`, id: g.id, nombre: g.nombre,
+  minimo: minimoDe(g) ? String(minimoDe(g)) : '', maximo: g.maximo ? String(g.maximo) : '',
+  opciones: g.opciones.map((o) => ({
+    id: o.id, nombre: o.nombre, precio: o.precio ? String(o.precio) : '', maximo: String(o.maximo ?? 1), producto_id: o.producto_id,
+    obligatorio: !!o.obligatorio, exclusiva: !!o.exclusiva, activo: o.activo !== false,
+    cantidad: o.cantidad ? String(o.cantidad) : '', unidad_medida_id: o.unidad_medida_id,
+  })),
+})) : [bloqueVacio()];
+
+// «¿Cómo funciona?» (la misma explicación que la web)
+const AYUDA = [
+  'Una tarjeta junta todo lo que se elige al vender un producto. Ej.: «Bebidas con leche» con los bloques 1. Tipo de leche (requerido, elige 1), 2. Azúcar (opcional, máximo 1) y 3. Extras (opcional). Se asigna a los productos; cada producto lleva una sola tarjeta.',
+  'Requerido: no deja agregar el producto hasta elegir el mínimo. Opcional: se puede dejar sin elegir. Mínimo y máximo cuentan las opciones del bloque en total, contando cada vez que se repite una. Con máximo 1, tocar otra opción la cambia.',
+  'Precio extra: se suma al producto (Deslactosada +$0.25). En blanco: gratis. Insumo: lo que se descuenta del inventario al venderse con esa opción (Leche entera 250 ml).',
+  'Casillas de cada opción: Obligatorio siempre va marcada; Una sola al elegirla quita todas las demás del bloque; Activa apagada no sale al vender.',
 ];
 
-/** Crear o editar un bloque de extras. productosIniciales: uno nuevo creado desde un producto ya lo lleva. */
-export function FormGrupo({ grupo, datos, onCerrar, onListo, productosIniciales = [] }: {
-  grupo: op.GrupoExtra | null; datos: Datos; onCerrar: () => void; onListo: (id?: number) => void; productosIniciales?: number[];
+/** Crear o editar una tarjeta de extras. productosIniciales: una nueva creada desde un producto ya lo lleva. */
+export function FormConjunto({ conjunto, datos, onCerrar, onListo, productosIniciales = [] }: {
+  conjunto: op.ConjuntoExtra | null; datos: DatosExtras; onCerrar: () => void; onListo: (id?: number) => void; productosIniciales?: number[];
 }) {
-  const [nombre, setNombre] = useState(grupo?.nombre ?? '');
-  // Unidades en total del grupo (en blanco: mínimo 0 = opcional, máximo sin tope)
-  const [minimo, setMinimo] = useState(grupo && minimoDe(grupo) ? String(minimoDe(grupo)) : '');
-  const [maximo, setMaximo] = useState(grupo?.maximo ? String(grupo.maximo) : '');
-  const min = Number(minimo) || 0;
-  const max = maximo ? Math.max(1, Number(maximo) || 1) : null;
-  const [opciones, setOpciones] = useState<OpcionForm[]>(
-    grupo?.opciones.map((o) => ({
-      id: o.id, nombre: o.nombre, precio: o.precio ? String(o.precio) : '', maximo: String(o.maximo ?? 1), producto_id: o.producto_id,
-      obligatorio: !!o.obligatorio, exclusiva: !!o.exclusiva, activo: o.activo !== false,
-      cantidad: o.cantidad ? String(o.cantidad) : '', unidad_medida_id: o.unidad_medida_id,
-    })) ?? [opcionVacia()]);
-  const [productos, setProductos] = useState<number[]>(grupo?.productos.map((p) => p.id) ?? productosIniciales);
-  const [eligiendoInsumo, setEligiendoInsumo] = useState<number | null>(null);
+  const [nombre, setNombre] = useState(conjunto?.nombre ?? '');
+  const [bloques, setBloques] = useState<BloqueForm[]>(() => aBloques(conjunto));
+  const [productos, setProductos] = useState<number[]>(conjunto?.productos.map((p) => p.id) ?? productosIniciales);
+  const [eligiendoInsumo, setEligiendoInsumo] = useState<string | null>(null); // «bloque-opción»
   const [buscarInsumo, setBuscarInsumo] = useState('');
   const [buscarProducto, setBuscarProducto] = useState('');
   const [guardando, setGuardando] = useState(false);
   const [verAyuda, setVerAyuda] = useState(false);
 
-  const cambiar = (i: number, c: Partial<OpcionForm>) => setOpciones((os) => os.map((o, j) => (j === i ? { ...o, ...c } : o)));
+  const cambiarBloque = (n: number, c: Partial<BloqueForm>) => setBloques((bs) => bs.map((b, i) => (i === n ? { ...b, ...c } : b)));
+  const cambiarOpcion = (n: number, k: number, c: Partial<OpcionForm>) =>
+    setBloques((bs) => bs.map((b, i) => (i === n ? { ...b, opciones: b.opciones.map((o, j) => (j === k ? { ...o, ...c } : o)) } : b)));
+  const moverBloque = (n: number, d: -1 | 1) => setBloques((bs) => {
+    const lista = [...bs];
+    [lista[n], lista[n + d]] = [lista[n + d], lista[n]];
+    return lista;
+  });
   const insumo = (id: number | null) => datos.insumos.find((x) => x.id === id);
   const insumosVisibles = useMemo(() => {
     const t = sinTildes(buscarInsumo.trim());
     return datos.insumos.filter((x) => !t || sinTildes(x.nombre).includes(t)).slice(0, 8);
   }, [buscarInsumo, datos.insumos]);
+  // Cada producto lleva una sola tarjeta: los que ya tienen otra no se pueden agregar aquí
+  const tarjetaDe = (productoId: number) => {
+    const id = datos.productos.find((p) => p.id === productoId)?.conjunto_id;
+    return id && id !== conjunto?.id ? datos.conjuntos.find((c) => c.id === id)?.nombre ?? 'otra tarjeta' : null;
+  };
   const productosVisibles = useMemo(() => {
     const t = sinTildes(buscarProducto.trim());
     return t ? datos.productos.filter((p) => sinTildes(p.nombre).includes(t) && !productos.includes(p.id)).slice(0, 8) : [];
   }, [buscarProducto, datos.productos, productos]);
 
-  const error = !nombre.trim() ? 'Ponle un nombre al grupo'
-    : !opciones.length ? 'Agrega al menos una opción'
-      : opciones.some((o) => !o.nombre.trim()) ? 'Cada opción necesita un nombre'
-        : max !== null && min > max ? 'El mínimo no puede ser mayor que el máximo'
-        : opciones.some((o) => o.producto_id && (!(Number(o.cantidad) > 0) || !o.unidad_medida_id)) ? 'Indica cuánto y en qué unidad gasta cada opción con insumo'
-          : null;
+  const malo = bloques.find((b) => b.maximo !== '' && (Number(b.minimo) || 0) > Number(b.maximo));
+  const error = !nombre.trim() ? 'Ponle un nombre a la tarjeta'
+    : !bloques.length ? 'Agrega al menos un bloque'
+      : bloques.some((b) => !b.nombre.trim()) ? 'Cada bloque necesita un nombre'
+        : bloques.some((b) => !b.opciones.length || b.opciones.some((o) => !o.nombre.trim())) ? 'Cada bloque necesita opciones con nombre'
+          : malo ? `«${malo.nombre}»: el mínimo no puede ser mayor que el máximo`
+            : bloques.some((b) => b.opciones.some((o) => o.producto_id && (!(Number(o.cantidad) > 0) || !o.unidad_medida_id))) ? 'Indica cuánto y en qué unidad gasta cada opción con insumo'
+              : null;
 
   const guardar = async () => {
     setGuardando(true);
     try {
-      const r = await op.guardarGrupoExtras({
-        nombre: nombre.trim(), obligatorio: min > 0, minimo: min, maximo: max, productos,
-        opciones: opciones.map((o) => ({
-          id: o.id, nombre: o.nombre.trim(), precio: Number(o.precio || 0), producto_id: o.producto_id,
-          obligatorio: o.obligatorio, exclusiva: o.exclusiva, activo: o.activo,
-          maximo: Math.min(20, Math.max(1, Math.floor(Number(o.maximo) || 1))),
-          cantidad: o.producto_id ? Number(o.cantidad) : null, unidad_medida_id: o.producto_id ? o.unidad_medida_id : null,
+      const r = await op.guardarConjuntoExtras({
+        nombre: nombre.trim(), productos,
+        bloques: bloques.map((b) => ({
+          id: b.id, nombre: b.nombre.trim(),
+          minimo: Number(b.minimo) || 0, maximo: b.maximo ? Math.max(1, Number(b.maximo) || 1) : null,
+          opciones: b.opciones.map((o) => ({
+            id: o.id, nombre: o.nombre.trim(), precio: Number(o.precio || 0), producto_id: o.producto_id,
+            obligatorio: o.obligatorio, exclusiva: o.exclusiva, activo: o.activo,
+            maximo: Math.min(20, Math.max(1, Math.floor(Number(o.maximo) || 1))),
+            cantidad: o.producto_id ? Number(o.cantidad) : null, unidad_medida_id: o.producto_id ? o.unidad_medida_id : null,
+          })),
         })),
-      }, grupo?.id);
+      }, conjunto?.id);
       avisar(r.message ?? 'Extras guardados');
-      onListo(r.id ?? grupo?.id);
+      onListo(r.id ?? conjunto?.id);
     } catch (err) {
       avisar('No se pudo guardar', mensajeError(err));
     } finally {
@@ -164,11 +208,11 @@ export function FormGrupo({ grupo, datos, onCerrar, onListo, productosIniciales 
   };
 
   return (
-    <Ventana visible titulo={grupo ? `Editar ${grupo.nombre}` : 'Nuevo grupo de extras'} onCerrar={onCerrar} ancho={780}
+    <Ventana visible titulo={conjunto ? `Editar ${conjunto.nombre}` : 'Nueva tarjeta de extras'} onCerrar={onCerrar} ancho={820}
       pie={
         <View style={{ flex: 1, gap: 6 }}>
           {error && <Text style={{ color: C.peligro }}>{error}</Text>}
-          <Boton titulo="Guardar extras" cargando={guardando} deshabilitado={!!error} onPress={guardar} />
+          <Boton titulo="Guardar tarjeta" cargando={guardando} deshabilitado={!!error} onPress={guardar} />
         </View>
       }>
       <Pressable onPress={() => setVerAyuda((v) => !v)} hitSlop={8} accessibilityLabel="¿Cómo funciona?"
@@ -177,80 +221,90 @@ export function FormGrupo({ grupo, datos, onCerrar, onListo, productosIniciales 
       </Pressable>
       {verAyuda && (
         <View style={e.ayudaCaja}>
-          <Text style={e.ayudaTexto}>Un <Text style={e.negrita}>grupo</Text> son las opciones que se eligen al tocar un producto en la venta o la mesa (tipo de leche, salsa, cómo van los huevos). Salen en el ticket y en la comanda debajo del producto.</Text>
-          {AYUDA.map((b) => (
-            <View key={b.titulo} style={e.ayudaBloque}>
-              <Text style={[e.ayudaTexto, e.negrita]}>{b.titulo}</Text>
-              {b.lineas.map((l) => <Text key={l} style={e.ayudaTexto}>{l}</Text>)}
-            </View>
-          ))}
+          {AYUDA.map((l) => <Text key={l} style={e.ayudaTexto}>{l}</Text>)}
         </View>
       )}
-      <Campo etiqueta="Nombre del grupo" value={nombre} onChangeText={setNombre} placeholder="Leche, Endulzante, Saborizante..." maxLength={80} />
-      {grupo && grupo.productos.length > 1 && (
-        <Text style={[e.suave, { color: '#92400E' }]}>Este bloque lo usan {grupo.productos.length} productos: lo que cambies aquí cambia en todos.</Text>
+      <Campo etiqueta="Nombre de la tarjeta (no lo ve el mesero)" value={nombre} onChangeText={setNombre} placeholder="Bebidas con leche" maxLength={80} />
+      {conjunto && conjunto.productos.length > 1 && (
+        <Text style={[e.suave, { color: '#92400E' }]}>La llevan {conjunto.productos.length} productos: lo que cambies aquí cambia en todos.</Text>
       )}
-      {/* Requerido / Opcional y cuántas en total, como en las apps de delivery */}
-      <Opciones opciones={[{ valor: 'opcional', texto: 'Opcional' }, { valor: 'requerido', texto: 'Requerido' }]} valor={min > 0 ? 'requerido' : 'opcional'}
-        onCambiar={(v) => setMinimo(v === 'requerido' ? String(Math.max(1, min)) : '')} />
-      <View style={{ flexDirection: 'row', gap: 8 }}>
-        <View style={{ flex: 1 }}><Campo etiqueta="Mínimo a elegir" value={minimo} onChangeText={(t) => setMinimo(t.replace(/[^0-9]/g, '').slice(0, 2))} keyboardType="number-pad" placeholder="0 (opcional)" /></View>
-        <View style={{ flex: 1 }}><Campo etiqueta="Máximo a elegir" value={maximo} onChangeText={(t) => setMaximo(t.replace(/[^0-9]/g, '').slice(0, 2))} keyboardType="number-pad" placeholder="Sin tope" /></View>
-      </View>
-      <Text style={e.suave}>{reglaTexto({ minimo: min, maximo: max })
-        ? `Al vender se verá: «${nombre.trim() || 'Grupo'}: ${reglaTexto({ minimo: min, maximo: max })}». Cuenta cada vez que se repite una opción.`
-        : 'En blanco: el grupo es opcional y sin tope. Ej.: Tipo de leche, mínimo 1 y máximo 2.'}</Text>
 
-      <Seccion titulo="Opciones" />
-      {opciones.map((o, i) => {
-        const ins = insumo(o.producto_id);
-        const unidadesInsumo = datos.unidades.filter((u) => !ins?.tipo || u.tipo === ins.tipo);
+      {bloques.map((b, n) => {
+        const min = Number(b.minimo) || 0;
+        const max = b.maximo ? Number(b.maximo) : null;
         return (
-          <View key={i} style={[e.opcion, !o.activo && { opacity: 0.6 }]}>
-            <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-end' }}>
-              <View style={{ flex: 2 }}><Campo etiqueta="Opción" value={o.nombre} onChangeText={(t) => cambiar(i, { nombre: t })} placeholder="Deslactosada" maxLength={80} /></View>
-              <View style={{ flex: 1 }}><Campo etiqueta="Precio extra ($)" value={o.precio} onChangeText={(t) => cambiar(i, { precio: t.replace(/[^0-9.]/g, '') })} keyboardType="decimal-pad" placeholder="0.00" /></View>
-              <View style={{ width: 84 }}><Campo etiqueta="Máximo" value={o.maximo} onChangeText={(t) => cambiar(i, { maximo: t.replace(/[^0-9]/g, '').slice(0, 2) })} keyboardType="number-pad" placeholder="1" /></View>
-              <Pressable onPress={() => setOpciones((os) => os.filter((_, j) => j !== i))} hitSlop={8} style={{ paddingBottom: 14 }}>
-                <Text style={{ color: C.peligro, fontWeight: '700' }}>Quitar</Text>
-              </Pressable>
+          <View key={b.clave} style={e.bloque}>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 8 }}>
+              <Text style={[e.bloqueTitulo, { paddingBottom: 14 }]}>{n + 1}.</Text>
+              <View style={{ flex: 1 }}><Campo etiqueta="Bloque" value={b.nombre} onChangeText={(t) => cambiarBloque(n, { nombre: t })} placeholder="Elige tu tipo de leche" maxLength={80} /></View>
             </View>
-            {ins ? (
-              <>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <Text style={[e.texto, { flex: 1 }]}>Descuenta: <Text style={{ fontWeight: '700' }}>{ins.nombre}</Text></Text>
-                  <Pressable onPress={() => cambiar(i, { producto_id: null, cantidad: '', unidad_medida_id: null })} hitSlop={8}><Text style={{ color: C.peligro, fontWeight: '600' }}>No descontar</Text></Pressable>
+            <Opciones opciones={[{ valor: 'opcional', texto: 'Opcional' }, { valor: 'requerido', texto: 'Requerido' }]} valor={min > 0 ? 'requerido' : 'opcional'}
+              onCambiar={(v) => cambiarBloque(n, { minimo: v === 'requerido' ? String(Math.max(1, min)) : '' })} />
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <View style={{ flex: 1 }}><Campo etiqueta="Mínimo" value={b.minimo} onChangeText={(t) => cambiarBloque(n, { minimo: t.replace(/[^0-9]/g, '').slice(0, 2) })} keyboardType="number-pad" placeholder="0" /></View>
+              <View style={{ flex: 1 }}><Campo etiqueta="Máximo" value={b.maximo} onChangeText={(t) => cambiarBloque(n, { maximo: t.replace(/[^0-9]/g, '').slice(0, 2) })} keyboardType="number-pad" placeholder="Sin tope" /></View>
+            </View>
+            <Text style={e.suave}>Al vender: «{b.nombre.trim() || 'Bloque'}» · {min > 0 ? 'Requerido' : 'Opcional'}{reglaTexto({ minimo: min, maximo: max }) ? ` · ${reglaTexto({ minimo: min, maximo: max })}` : ''}{max === 1 ? ' (tocar otra la cambia)' : ''}</Text>
+
+            {b.opciones.map((o, k) => {
+              const clave = `${n}-${k}`;
+              const ins = insumo(o.producto_id);
+              const unidadesInsumo = datos.unidades.filter((u) => !ins?.tipo || u.tipo === ins.tipo);
+              return (
+                <View key={k} style={[e.opcion, !o.activo && { opacity: 0.6 }]}>
+                  <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-end' }}>
+                    <View style={{ flex: 2 }}><Campo etiqueta="Opción" value={o.nombre} onChangeText={(t) => cambiarOpcion(n, k, { nombre: t })} placeholder="Leche entera" maxLength={80} /></View>
+                    <View style={{ flex: 1 }}><Campo etiqueta="Precio extra ($)" value={o.precio} onChangeText={(t) => cambiarOpcion(n, k, { precio: t.replace(/[^0-9.]/g, '') })} keyboardType="decimal-pad" placeholder="0.00" /></View>
+                    <View style={{ width: 76 }}><Campo etiqueta="Máx." value={o.maximo} onChangeText={(t) => cambiarOpcion(n, k, { maximo: t.replace(/[^0-9]/g, '').slice(0, 2) })} keyboardType="number-pad" placeholder="1" /></View>
+                    <Pressable onPress={() => cambiarBloque(n, { opciones: b.opciones.filter((_, j) => j !== k) })} hitSlop={8} style={{ paddingBottom: 14 }}>
+                      <Text style={{ color: C.peligro, fontWeight: '700' }}>Quitar</Text>
+                    </Pressable>
+                  </View>
+                  {ins ? (
+                    <>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Text style={[e.texto, { flex: 1 }]}>Descuenta: <Text style={{ fontWeight: '700' }}>{ins.nombre}</Text></Text>
+                        <Pressable onPress={() => cambiarOpcion(n, k, { producto_id: null, cantidad: '', unidad_medida_id: null })} hitSlop={8}><Text style={{ color: C.peligro, fontWeight: '600' }}>No descontar</Text></Pressable>
+                      </View>
+                      <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <View style={{ width: 120 }}><Campo value={o.cantidad} onChangeText={(t) => cambiarOpcion(n, k, { cantidad: t.replace(/[^0-9.]/g, '') })} keyboardType="decimal-pad" placeholder="Cantidad" /></View>
+                        <Opciones opciones={unidadesInsumo.map((u) => ({ valor: u.id, texto: u.abreviatura ?? u.nombre }))} valor={o.unidad_medida_id} onCambiar={(id) => cambiarOpcion(n, k, { unidad_medida_id: id })} />
+                      </View>
+                    </>
+                  ) : eligiendoInsumo === clave ? (
+                    <View style={{ gap: 6 }}>
+                      <TextInput style={e.buscar} value={buscarInsumo} onChangeText={setBuscarInsumo} placeholder="Buscar insumo (leche, jarabe...)" placeholderTextColor={C.tenue} autoFocus />
+                      {insumosVisibles.map((x) => (
+                        <Pressable key={x.id} style={e.resultado} onPress={() => { cambiarOpcion(n, k, { producto_id: x.id, unidad_medida_id: x.unidad_medida_id }); setEligiendoInsumo(null); setBuscarInsumo(''); }}>
+                          <Text style={e.texto}>{x.nombre}</Text><Text style={e.suave}>{x.unidad ?? ''}</Text>
+                        </Pressable>
+                      ))}
+                      <Pressable onPress={() => setEligiendoInsumo(null)}><Text style={e.suave}>Cancelar</Text></Pressable>
+                    </View>
+                  ) : (
+                    <Pressable onPress={() => { setEligiendoInsumo(clave); setBuscarInsumo(''); }} hitSlop={6}>
+                      <Text style={e.enlace}>+ Descontar un insumo al venderla (opcional)</Text>
+                    </Pressable>
+                  )}
+                  <Interruptor titulo="Obligatorio" detalle="Siempre va marcada y no se puede quitar" valor={o.obligatorio} onCambiar={(v) => cambiarOpcion(n, k, { obligatorio: v })} />
+                  <Interruptor titulo="Una sola" detalle="Al elegirla se quitan todas las demás del bloque" valor={o.exclusiva} onCambiar={(v) => cambiarOpcion(n, k, { exclusiva: v })} />
+                  <Interruptor titulo="Activa" detalle={o.activo ? 'Sale al vender' : 'Apagada: no sale al vender'} valor={o.activo} onCambiar={(v) => cambiarOpcion(n, k, { activo: v })} />
                 </View>
-                <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <View style={{ width: 120 }}><Campo value={o.cantidad} onChangeText={(t) => cambiar(i, { cantidad: t.replace(/[^0-9.]/g, '') })} keyboardType="decimal-pad" placeholder="Cantidad" /></View>
-                  <Opciones opciones={unidadesInsumo.map((u) => ({ valor: u.id, texto: u.abreviatura ?? u.nombre }))} valor={o.unidad_medida_id} onCambiar={(id) => cambiar(i, { unidad_medida_id: id })} />
-                </View>
-              </>
-            ) : eligiendoInsumo === i ? (
-              <View style={{ gap: 6 }}>
-                <TextInput style={e.buscar} value={buscarInsumo} onChangeText={setBuscarInsumo} placeholder="Buscar insumo (leche, jarabe...)" placeholderTextColor={C.tenue} autoFocus />
-                {insumosVisibles.map((x) => (
-                  <Pressable key={x.id} style={e.resultado} onPress={() => { cambiar(i, { producto_id: x.id, unidad_medida_id: x.unidad_medida_id }); setEligiendoInsumo(null); setBuscarInsumo(''); }}>
-                    <Text style={e.texto}>{x.nombre}</Text><Text style={e.suave}>{x.unidad ?? ''}</Text>
-                  </Pressable>
-                ))}
-                <Pressable onPress={() => setEligiendoInsumo(null)}><Text style={e.suave}>Cancelar</Text></Pressable>
-              </View>
-            ) : (
-              <Pressable onPress={() => { setEligiendoInsumo(i); setBuscarInsumo(''); }} hitSlop={6}>
-                <Text style={e.enlace}>+ Descontar un insumo al venderla (opcional)</Text>
-              </Pressable>
-            )}
-            <Interruptor titulo="Obligatorio" detalle="Siempre va marcada y no se puede quitar" valor={o.obligatorio} onCambiar={(v) => cambiar(i, { obligatorio: v })} />
-            <Interruptor titulo="Una sola" detalle="Al elegirla se quitan las demás opciones del grupo" valor={o.exclusiva} onCambiar={(v) => cambiar(i, { exclusiva: v })} />
-            <Interruptor titulo="Activa" detalle={o.activo ? 'Sale al vender' : 'Apagada: no sale al vender'} valor={o.activo} onCambiar={(v) => cambiar(i, { activo: v })} />
+              );
+            })}
+            <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+              <Boton titulo="+ Opción" variante="contorno" chico onPress={() => cambiarBloque(n, { opciones: [...b.opciones, opcionVacia()] })} />
+              <View style={{ flex: 1 }} />
+              <Boton titulo="↑" variante="contorno" chico deshabilitado={n === 0} onPress={() => moverBloque(n, -1)} />
+              <Boton titulo="↓" variante="contorno" chico deshabilitado={n === bloques.length - 1} onPress={() => moverBloque(n, 1)} />
+              <Boton titulo="Quitar bloque" variante="contorno" chico onPress={() => setBloques((bs) => bs.filter((_, i) => i !== n))} />
+            </View>
           </View>
         );
       })}
-      <Text style={{ fontSize: 13, color: C.suave }}>Máximo: cuántas veces se puede pedir esa opción en un mismo producto (Huevo extra: 3). Con 1 solo se marca o no.</Text>
-      <Boton titulo="+ Agregar opción" variante="contorno" onPress={() => setOpciones((os) => [...os, opcionVacia()])} />
+      <Boton titulo="+ Agregar bloque" variante="contorno" onPress={() => setBloques((bs) => [...bs, bloqueVacio()])} />
 
-      <Seccion titulo="Productos que lo usan" />
+      <Seccion titulo="Productos que la llevan" />
       <View style={e.chips}>
         {productos.map((id) => (
           <Pressable key={id} onPress={() => setProductos((ps) => ps.filter((x) => x !== id))} style={e.chipActivo}>
@@ -259,30 +313,34 @@ export function FormGrupo({ grupo, datos, onCerrar, onListo, productosIniciales 
         ))}
         {productos.length === 0 && <Text style={e.suave}>Ninguno todavía: búscalos abajo.</Text>}
       </View>
-      <TextInput style={e.buscar} value={buscarProducto} onChangeText={setBuscarProducto} placeholder="Buscar producto para asignarlo (Americano, Frappé...)" placeholderTextColor={C.tenue} />
-      {productosVisibles.map((p) => (
-        <Pressable key={p.id} style={e.resultado} onPress={() => { setProductos((ps) => [...ps, p.id]); setBuscarProducto(''); }}>
-          <Text style={e.texto}>+ {p.nombre}</Text>
-        </Pressable>
-      ))}
+      <TextInput style={e.buscar} value={buscarProducto} onChangeText={setBuscarProducto} placeholder="Buscar producto para asignarla (Chocolate, Café...)" placeholderTextColor={C.tenue} />
+      {productosVisibles.map((p) => {
+        const otra = tarjetaDe(p.id);
+        return (
+          <Pressable key={p.id} style={[e.resultado, !!otra && { opacity: 0.5 }]} disabled={!!otra}
+            onPress={() => { setProductos((ps) => [...ps, p.id]); setBuscarProducto(''); }}>
+            <Text style={e.texto}>+ {p.nombre}</Text>
+            {otra && <Text style={e.suave}>ya lleva «{otra}»</Text>}
+          </Pressable>
+        );
+      })}
     </Ventana>
   );
 }
 
 const e = StyleSheet.create({
-  chipOpcion: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', backgroundColor: '#F3F4F6', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
   ayudaBoton: { alignSelf: 'flex-end', borderWidth: 1, borderColor: '#D1D5DB', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
   ayudaBotonActivo: { backgroundColor: C.primario, borderColor: C.primario },
   ayudaBotonTexto: { fontSize: 13, fontWeight: '600', color: C.suave },
   ayudaCaja: { gap: 8, backgroundColor: '#EFF6FF', borderRadius: 8, padding: 12 },
-  ayudaBloque: { gap: 4, backgroundColor: '#fff', borderRadius: 6, borderWidth: 1, borderColor: '#DBEAFE', padding: 8 },
   ayudaTexto: { fontSize: 13, lineHeight: 19, color: '#1E3A8A' },
-  negrita: { fontWeight: '700' },
   contenido: { padding: 12, gap: 10, maxWidth: 1000, width: '100%', alignSelf: 'center' },
   cabecera: { flexDirection: 'row', gap: 12, alignItems: 'center' },
   vacio: { textAlign: 'center', color: C.suave, padding: 24 },
-  tarjeta: { backgroundColor: '#fff', borderRadius: radio, borderWidth: 1, borderColor: C.borde, padding: 14, gap: 6 },
+  tarjeta: { backgroundColor: '#fff', borderRadius: radio, borderWidth: 1, borderColor: C.borde, padding: 14, gap: 10 },
   titulo: { fontSize: 17, fontWeight: '800', color: C.texto },
+  bloque: { gap: 8, padding: 12, borderRadius: radio, borderWidth: 2, borderColor: '#E5E7EB', backgroundColor: '#fff' },
+  bloqueTitulo: { fontSize: 16, fontWeight: '800', color: C.texto },
   texto: { fontSize: 15, color: C.texto },
   suave: { fontSize: 13, color: C.suave },
   enlace: { fontSize: 14, fontWeight: '700', color: C.primario },

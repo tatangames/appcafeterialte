@@ -446,10 +446,30 @@ export interface GrupoExtra {
 }
 export interface InsumoExtra { id: number; nombre: string; unidad_medida_id: number | null; unidad: string | null; tipo: string | null }
 
+// Tarjeta de extras («Bebidas con leche»): sus bloques en orden y los productos que la llevan (uno, una sola)
+export interface ConjuntoExtra { id: number; nombre: string; bloques: GrupoExtra[]; productos: { id: number; nombre: string }[] }
+
 export const getGruposExtras = () => api.get<{
-  grupos: GrupoExtra[]; productos: { id: number; nombre: string }[]; insumos: InsumoExtra[];
+  conjuntos: ConjuntoExtra[]; grupos: GrupoExtra[];
+  productos: { id: number; nombre: string; conjunto_id: number | null }[]; insumos: InsumoExtra[];
   unidades: { id: number; nombre: string; abreviatura: string | null; tipo: string }[];
 }>('/mesas/config/modificadores');
+
+type OpcionGuardar = { id?: number; nombre: string; precio: number; maximo?: number; obligatorio: boolean; exclusiva: boolean; activo: boolean; producto_id: number | null; cantidad: number | null; unidad_medida_id: number | null };
+
+export const guardarConjuntoExtras = (datos: {
+  nombre: string;
+  // minimo/maximo: unidades en total del bloque, contando repeticiones (0 = opcional; null = sin tope)
+  bloques: { id?: number; nombre: string; minimo: number; maximo: number | null; opciones: OpcionGuardar[] }[];
+  productos: number[];
+}, id?: number) => id ? api.put<{ id: number; message: string }>(`/mesas/config/conjuntos/${id}`, datos) : api.post<{ id: number; message: string }>('/mesas/config/conjuntos', datos);
+
+export const borrarConjuntoExtras = (id: number) => api.delete<{ message: string }>(`/mesas/config/conjuntos/${id}`);
+
+// La tarjeta de extras de un producto (o null)
+export const getConjuntoProducto = (productoId: number) => api.get<{ conjunto_id: number | null }>(`/mesas/config/productos/${productoId}/modificadores`);
+export const asignarConjuntoProducto = (productoId: number, conjuntoId: number | null) =>
+  api.put<{ message: string }>(`/mesas/config/productos/${productoId}/modificadores`, { conjunto_id: conjuntoId });
 
 export const guardarGrupoExtras = (datos: {
   nombre: string;
@@ -460,10 +480,6 @@ export const guardarGrupoExtras = (datos: {
   productos: number[];
 }, id?: number) => id ? api.put<{ id: number; message: string }>(`/mesas/config/modificadores/${id}`, datos) : api.post<{ id: number; message: string }>('/mesas/config/modificadores', datos);
 
-// Bloques de un producto (grupos de extras) en el orden en que salen al vender
-export const getBloquesProducto = (productoId: number) => api.get<{ grupos: number[] }>(`/mesas/config/productos/${productoId}/modificadores`);
-export const guardarBloquesProducto = (productoId: number, grupos: number[]) =>
-  api.put<{ message: string }>(`/mesas/config/productos/${productoId}/modificadores`, { grupos });
 
 // Recetas
 export interface IngredienteRecetaCosto {

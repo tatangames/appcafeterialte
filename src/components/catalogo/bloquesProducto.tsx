@@ -1,128 +1,97 @@
-// Bloques de extras de un producto, uno debajo de otro como en las apps de delivery
-// (Tipo de leche, Leche extra...): agregar uno existente o nuevo, ordenarlos, editarlos y quitarlos.
-// Cada cambio de la lista se guarda al momento, aparte del botón «Guardar producto».
+// La tarjeta de extras de un producto (una sola), como en las apps de delivery: elegir una que ya
+// existe, crear una nueva, editarla o quitarla. Cada cambio se guarda al momento, aparte del
+// botón «Guardar producto».
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { FormGrupo } from '@/components/catalogo/extras';
-import { Boton, Etiqueta } from '@/components/ui';
+import { DatosExtras, FormConjunto, VistaTarjeta } from '@/components/catalogo/extras';
+import { Boton } from '@/components/ui';
 import { C, radio } from '@/constants/colores';
 import { mensajeError } from '@/lib/api';
 import { avisar } from '@/lib/aviso';
-import { dinero } from '@/lib/formato';
-import { minimoDe, reglaTexto } from '@/lib/modificadores';
 import * as op from '@/lib/operaciones';
 import { sinTildes } from '@/lib/texto';
 
-type Datos = Awaited<ReturnType<typeof op.getGruposExtras>>;
-
 export function BloquesProducto({ productoId }: { productoId: number }) {
-  const [datos, setDatos] = useState<Datos | null>(null);
-  const [suyos, setSuyos] = useState<number[]>([]);
+  const [datos, setDatos] = useState<DatosExtras | null>(null);
+  const [suya, setSuya] = useState<number | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [buscar, setBuscar] = useState('');
-  // undefined: cerrado; null: bloque nuevo
-  const [editando, setEditando] = useState<op.GrupoExtra | null | undefined>(undefined);
+  const [eligiendo, setEligiendo] = useState(false);
+  // undefined: cerrado; null: tarjeta nueva
+  const [editando, setEditando] = useState<op.ConjuntoExtra | null | undefined>(undefined);
 
   const cargar = useCallback(() => {
-    Promise.all([op.getGruposExtras(), op.getBloquesProducto(productoId)])
-      .then(([d, b]) => { setDatos(d); setSuyos(b.grupos); })
+    Promise.all([op.getGruposExtras(), op.getConjuntoProducto(productoId)])
+      .then(([d, p]) => { setDatos(d); setSuya(p.conjunto_id); })
       .catch((err) => avisar('No se pudieron cargar los extras', mensajeError(err)));
   }, [productoId]);
   useEffect(cargar, [cargar]);
 
-  const guardarLista = async (lista: number[]) => {
-    const antes = suyos;
-    setSuyos(lista);
+  const asignar = async (conjuntoId: number | null) => {
     setGuardando(true);
     try {
-      await op.guardarBloquesProducto(productoId, lista);
+      avisar((await op.asignarConjuntoProducto(productoId, conjuntoId)).message);
+      setEligiendo(false);
+      setBuscar('');
+      cargar();
     } catch (err) {
-      setSuyos(antes);
       avisar('No se pudo guardar', mensajeError(err));
     } finally {
       setGuardando(false);
     }
   };
 
-  const mover = (n: number, d: -1 | 1) => {
-    const lista = [...suyos];
-    [lista[n], lista[n + d]] = [lista[n + d], lista[n]];
-    guardarLista(lista);
-  };
-
-  const bloques = suyos.map((id) => datos?.grupos.find((g) => g.id === id)).filter((g): g is op.GrupoExtra => !!g);
-  // Para agregar uno que ya existe: se escribe «leche» y aparecen los que no lleva
   const disponibles = useMemo(() => {
     const t = sinTildes(buscar.trim());
-    return (datos?.grupos ?? []).filter((g) => !suyos.includes(g.id) && (!t || sinTildes(g.nombre).includes(t))).slice(0, 8);
-  }, [datos, suyos, buscar]);
+    return (datos?.conjuntos ?? []).filter((c) => c.id !== suya && (!t || sinTildes(c.nombre).includes(t))).slice(0, 8);
+  }, [datos, suya, buscar]);
 
   if (!datos) return <Text style={e.suave}>Cargando extras...</Text>;
+  const tarjeta = datos.conjuntos.find((c) => c.id === suya) ?? null;
+  const otros = tarjeta?.productos.filter((p) => p.id !== productoId) ?? [];
 
   return (
     <View style={{ gap: 10 }}>
-      <Text style={e.suave}>Lo que se elige al vender este producto, en este orden. Se guarda al momento.</Text>
-      {bloques.length === 0 && <Text style={e.vacio}>No lleva extras. Agrega un bloque como «Tipo de leche» o «Salsa».</Text>}
+      <Text style={e.suave}>Lo que se elige al vender este producto. Lleva una sola tarjeta; se guarda al momento.</Text>
+      {tarjeta ? (
+        <View style={e.tarjeta}>
+          <Text style={e.titulo}>{tarjeta.nombre}</Text>
+          <VistaTarjeta conjunto={tarjeta} />
+          {otros.length > 0 && <Text style={e.suave}>También la llevan: {otros.map((p) => p.nombre).join(', ')}. Si la editas, cambia en todos.</Text>}
+        </View>
+      ) : <Text style={e.vacio}>No lleva extras.</Text>}
 
-      {bloques.map((g, n) => {
-        const requerido = minimoDe(g) > 0;
-        const otros = g.productos.filter((p) => p.id !== productoId);
-        return (
-          <View key={g.id} style={e.bloque}>
-            <View style={e.cabecera}>
-              <Text style={e.numero}>{n + 1}</Text>
-              <Text style={e.titulo}>{g.nombre}</Text>
-              <Etiqueta texto={`${requerido ? 'Requerido' : 'Opcional'}${reglaTexto(g) ? ` · ${reglaTexto(g)}` : ''}`}
-                fondo={requerido ? '#FEF3C7' : '#F3F4F6'} color={requerido ? '#92400E' : '#374151'} />
-            </View>
-            {g.opciones.filter((o) => o.activo !== false).map((o) => (
-              <View key={o.id} style={e.opcion}>
-                <Text style={[e.texto, { flex: 1 }]}>
-                  {o.nombre}{(o.maximo ?? 1) > 1 ? ` · hasta ${o.maximo}` : ''}{o.insumo ? `  (descuenta ${o.cantidad} ${o.unidad ?? ''} de ${o.insumo})` : ''}
-                </Text>
-                <Text style={e.suave}>{o.precio > 0 ? `+${dinero(o.precio)}` : 'Gratis'}</Text>
-              </View>
-            ))}
-            {otros.length > 0 && <Text style={e.suave}>También en: {otros.map((p) => p.nombre).join(', ')}</Text>}
-            <View style={e.acciones}>
-              <Pressable style={[e.flecha, (n === 0 || guardando) && { opacity: 0.3 }]} disabled={n === 0 || guardando} onPress={() => mover(n, -1)}
-                accessibilityLabel={`Subir ${g.nombre}`}><Text style={e.flechaTexto}>↑</Text></Pressable>
-              <Pressable style={[e.flecha, (n === bloques.length - 1 || guardando) && { opacity: 0.3 }]} disabled={n === bloques.length - 1 || guardando}
-                onPress={() => mover(n, 1)} accessibilityLabel={`Bajar ${g.nombre}`}><Text style={e.flechaTexto}>↓</Text></Pressable>
-              <View style={{ flex: 1 }} />
-              <Boton titulo="Editar" variante="contorno" chico onPress={() => setEditando(g)} />
-              <Boton titulo="Quitar" variante="contorno" chico deshabilitado={guardando} onPress={() => guardarLista(suyos.filter((x) => x !== g.id))} />
-            </View>
-          </View>
-        );
-      })}
+      <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+        {tarjeta && <Boton titulo="Editar tarjeta" variante="contorno" chico onPress={() => setEditando(tarjeta)} />}
+        {datos.conjuntos.some((c) => c.id !== suya) && (
+          <Boton titulo={tarjeta ? 'Cambiar por otra' : 'Elegir una tarjeta'} variante="contorno" chico onPress={() => setEligiendo((v) => !v)} />
+        )}
+        <Boton titulo="+ Tarjeta nueva" variante="contorno" chico onPress={() => setEditando(null)} />
+        {tarjeta && <Boton titulo="Quitar extras" variante="contorno" chico deshabilitado={guardando} onPress={() => asignar(null)} />}
+      </View>
 
-      {datos.grupos.some((g) => !suyos.includes(g.id)) && (
+      {eligiendo && (
         <View style={{ gap: 6 }}>
-          <TextInput style={e.buscar} value={buscar} onChangeText={setBuscar} placeholder="Agregar un bloque que ya existe (leche, salsa...)"
-            placeholderTextColor={C.tenue} autoCorrect={false} />
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            {disponibles.map((g) => (
-              <Pressable key={g.id} disabled={guardando} onPress={() => { setBuscar(''); guardarLista([...suyos, g.id]); }}
-                style={({ pressed }) => [e.chip, pressed && { opacity: 0.7 }]}>
-                <Text style={e.texto}>+ {g.nombre}</Text>
-              </Pressable>
-            ))}
-          </View>
+          <TextInput style={e.buscar} value={buscar} onChangeText={setBuscar} placeholder="Buscar tarjeta (bebidas, desayunos...)" placeholderTextColor={C.tenue} autoCorrect={false} />
+          {disponibles.map((c) => (
+            <Pressable key={c.id} disabled={guardando} onPress={() => asignar(c.id)} style={({ pressed }) => [e.resultado, pressed && { opacity: 0.7 }]}>
+              <Text style={e.texto}>{c.nombre}</Text>
+              <Text style={e.suave}>{c.bloques.map((b) => b.nombre).join(' · ')}</Text>
+            </Pressable>
+          ))}
         </View>
       )}
-      <Boton titulo="+ Crear bloque nuevo" variante="contorno" onPress={() => setEditando(null)} />
 
       {editando !== undefined && (
-        <FormGrupo grupo={editando} datos={datos} productosIniciales={[productoId]}
+        <FormConjunto conjunto={editando} datos={datos} productosIniciales={suya ? [] : [productoId]}
           onCerrar={() => setEditando(undefined)}
           onListo={async (id) => {
-            const nuevo = editando === null;
+            const nueva = editando === null;
             setEditando(undefined);
-            // Uno nuevo queda al final de la lista del producto
-            if (nuevo && id && !suyos.includes(id)) await op.guardarBloquesProducto(productoId, [...suyos, id]).catch(() => null);
-            cargar();
+            // Si ya llevaba otra, se pasa a la nueva
+            if (nueva && suya && id) await asignar(id);
+            else cargar();
           }} />
       )}
     </View>
@@ -132,15 +101,9 @@ export function BloquesProducto({ productoId }: { productoId: number }) {
 const e = StyleSheet.create({
   suave: { fontSize: 13, color: C.suave },
   vacio: { fontSize: 14, color: C.suave, padding: 14, textAlign: 'center', borderWidth: 1, borderStyle: 'dashed', borderColor: '#D1D5DB', borderRadius: radio },
-  bloque: { borderWidth: 1, borderColor: C.borde, borderRadius: radio, padding: 12, gap: 6, backgroundColor: '#fff' },
-  cabecera: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
-  numero: { fontSize: 14, fontWeight: '700', color: C.tenue },
-  titulo: { fontSize: 16, fontWeight: '700', color: C.texto },
-  opcion: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4, borderTopWidth: 1, borderTopColor: '#F3F4F6' },
-  texto: { fontSize: 14, color: C.texto },
-  acciones: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 4 },
-  flecha: { width: 40, height: 40, borderRadius: radio, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' },
-  flechaTexto: { fontSize: 18, fontWeight: '700', color: C.texto },
+  tarjeta: { borderWidth: 1, borderColor: C.borde, borderRadius: radio, padding: 12, gap: 10, backgroundColor: '#fff' },
+  titulo: { fontSize: 16, fontWeight: '800', color: C.texto },
+  texto: { fontSize: 15, color: C.texto },
   buscar: { height: 46, borderWidth: 1, borderColor: '#D1D5DB', borderRadius: radio, paddingHorizontal: 14, fontSize: 15, backgroundColor: '#fff', color: C.texto },
-  chip: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 999, borderWidth: 1, borderColor: '#D1D5DB', backgroundColor: '#F9FAFB' },
+  resultado: { gap: 2, padding: 12, borderRadius: radio, borderWidth: 1, borderColor: C.borde, backgroundColor: '#fff' },
 });
