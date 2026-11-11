@@ -96,6 +96,10 @@ function FormProducto({ producto, onCerrar, onGuardado }: { producto: op.Product
   });
   const [guardando, setGuardando] = useState(false);
   const [verAyudaClase, setVerAyudaClase] = useState(false);
+  // Producto nuevo: los extras armados aquí se guardan en cuanto el producto existe
+  const [extras, setExtras] = useState<op.BloqueGuardar[] | null>(null);
+  // Lleva extras lo que se vende (Chocolate, Brownie); no los insumos (Leche) ni los empaques
+  const llevaExtras = (d.se_vende || d.consumo_interno) && d.clase !== 'materia_prima' && d.clase !== 'empaque';
   const cambiar = (c: Partial<typeof d>) => setD((x) => ({ ...x, ...c }));
 
   useEffect(() => {
@@ -127,6 +131,15 @@ function FormProducto({ producto, onCerrar, onGuardado }: { producto: op.Product
         stock_minimo: Number(d.stock_minimo || 0), orden_pos: producto?.orden_pos ?? 0, color_pos: d.color,
         unidad_medida_id: d.unidad_medida_id!, categorias: d.categorias, ...(producto ? { activo: d.activo } : {}),
       }, producto?.id);
+      if (!producto && r.id && extras?.length && llevaExtras) {
+        try {
+          await op.guardarExtrasProducto(r.id, extras);
+        } catch (err) {
+          avisar('El producto se guardó, pero sus extras no', `${mensajeError(err)}
+
+Ábrelo y agrégaselos de nuevo.`);
+        }
+      }
       avisar(r.message);
       onGuardado();
     } catch (err) {
@@ -225,11 +238,11 @@ function FormProducto({ producto, onCerrar, onGuardado }: { producto: op.Product
       {producto && <Interruptor titulo="Activo" detalle="Si lo apagas deja de aparecer en ventas y compras" valor={d.activo} onCambiar={(v) => cambiar({ activo: v })} />}
 
       {/* Bloques de extras (Tipo de leche, Salsa...) como en las apps de delivery; un producto nuevo se guarda primero */}
-      {(d.se_vende || d.consumo_interno) && puede('mesas.configurar') && (
+      {llevaExtras && puede('mesas.configurar') && (
         <>
           <Seccion titulo="Extras (modificadores)" />
-          {producto ? <BloquesProducto productoId={producto.id} nombre={producto.nombre} />
-            : <Text style={e.suave}>Guarda el producto primero; después, al editarlo, aquí le agregas sus extras.</Text>}
+          {producto ? <BloquesProducto productoId={producto.id} nombre={d.nombre || producto.nombre} />
+            : <BloquesProducto productoId={null} nombre={d.nombre} pendientes={extras} onPendientes={setExtras} />}
         </>
       )}
     </Ventana>

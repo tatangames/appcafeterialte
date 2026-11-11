@@ -3,21 +3,19 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CategoriasUnidades } from '@/components/catalogo/categorias';
-import { ExtrasCatalogo } from '@/components/catalogo/extras';
 import { ProductosCatalogo } from '@/components/catalogo/productos';
 import { RecetasCatalogo } from '@/components/catalogo/recetas';
 import { Encabezado } from '@/components/encabezado';
 import { C } from '@/constants/colores';
 import { useSesion } from '@/lib/sesion';
 
-type Pestana = 'productos' | 'recetas' | 'extras' | 'categorias';
+type Pestana = 'productos' | 'recetas' | 'categorias';
 
-// Lo que se vende y cómo se arma: productos, recetas, extras (modificadores), categorías y unidades.
+// Lo que se vende y cómo se arma: productos (con sus extras), recetas, categorías y unidades.
 // Cada pestaña aparece solo con su permiso
 const PESTANAS: { id: Pestana; texto: string; permisos: string[] }[] = [
   { id: 'productos', texto: 'Productos', permisos: ['productos.gestionar', 'productos.ver'] },
   { id: 'recetas', texto: 'Recetas', permisos: ['recetas.gestionar'] },
-  { id: 'extras', texto: 'Modificadores', permisos: ['mesas.configurar'] },
   { id: 'categorias', texto: 'Categorías y unidades', permisos: ['catalogos.gestionar'] },
 ];
 
@@ -28,7 +26,7 @@ export default function Catalogo() {
 
   return (
     <SafeAreaView style={e.pantalla} edges={['top', 'left', 'right', 'bottom']}>
-      <Encabezado titulo="Catálogo" subtitulo="Productos, recetas, extras y categorías" />
+      <Encabezado titulo="Catálogo" subtitulo="Productos, recetas y categorías" />
       <View style={e.pestanas}>
         {visibles.map((p) => (
           <Pressable key={p.id} onPress={() => setPestana(p.id)} style={[e.pestana, pestana === p.id && e.pestanaActiva]}>
@@ -39,7 +37,6 @@ export default function Catalogo() {
       <View style={{ flex: 1 }}>
         {pestana === 'productos' && <ProductosCatalogo />}
         {pestana === 'recetas' && <RecetasCatalogo />}
-        {pestana === 'extras' && <ExtrasCatalogo />}
         {pestana === 'categorias' && <CategoriasUnidades />}
       </View>
     </SafeAreaView>
