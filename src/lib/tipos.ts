@@ -115,6 +115,9 @@ export interface GrupoModificador {
   nombre: string;
   obligatorio: boolean;
   multiple: boolean;
+  // Unidades en total del grupo, contando repeticiones («Tipo de leche: de 1 a 2»); maximo null = sin tope
+  minimo?: number;
+  maximo?: number | null;
   // agotado: su insumo (Leche entera) ya no alcanza; no se puede elegir
   // maximo: cuántas veces se puede pedir en un mismo producto (1 = se marca o no)
   // obligatorio: siempre va (no se quita); exclusiva: «una sola», al elegirla se quitan las demás del grupo

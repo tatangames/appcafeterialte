@@ -9,6 +9,7 @@ import { mensajeError } from '@/lib/api';
 import { avisar } from '@/lib/aviso';
 import { dinero } from '@/lib/formato';
 import * as op from '@/lib/operaciones';
+import { minimoDe, reglaTexto } from '@/lib/modificadores';
 import { sinTildes } from '@/lib/texto';
 
 type Datos = Awaited<ReturnType<typeof op.getGruposExtras>>;
@@ -51,7 +52,7 @@ export function ExtrasCatalogo() {
         <Pressable key={g.id} onPress={() => setEditando({ grupo: g })} style={({ pressed }) => [e.tarjeta, pressed && { opacity: 0.85 }]}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <Text style={e.titulo}>{g.nombre}</Text>
-            {g.obligatorio && <Etiqueta texto="Elegir al menos una" fondo="#FEF3C7" color="#92400E" />}
+            {!!reglaTexto(g) && <Etiqueta texto={reglaTexto(g).replace(/^./, (c) => c.toUpperCase())} fondo="#FEF3C7" color="#92400E" />}
           </View>
           <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
             {g.opciones.map((o) => (
@@ -85,7 +86,7 @@ const AYUDA: { titulo: string; lineas: string[] }[] = [
   { titulo: 'Casillas de cada opción', lineas: [
     'Obligatorio: la opción siempre va marcada y no se puede quitar (si tiene máximo, se puede subir). Ej.: «Tortillas» del desayuno.',
     'Una sola: al elegirla se quitan las demás opciones del grupo, y al elegir otra se quita ella. Ej.: «Sin azúcar» quita «Azúcar extra». Si todas son «una sola», solo se elige una (Estrellados, Revueltos o Picados).',
-    'Elegir al menos una (del grupo): no deja agregar el producto sin marcar alguna opción. Ej.: «Huevos» del desayuno.',
+    'Mínimo y máximo (del grupo): cuántas opciones se eligen en total, contando cada vez que se repite una. Ej.: «Huevos» mínimo 1; «Tipo de leche» mínimo 1, máximo 2. Con mínimo no deja agregar el producto hasta completarlo; con máximo no deja pasarse.',
     'Activa: apagada no sale al vender, pero se conserva (un sabor que se acabó por temporada).',
   ] },
   { titulo: 'Precio extra', lineas: [
@@ -102,7 +103,11 @@ const AYUDA: { titulo: string; lineas: string[] }[] = [
 
 function FormGrupo({ grupo, datos, onCerrar, onListo }: { grupo: op.GrupoExtra | null; datos: Datos; onCerrar: () => void; onListo: () => void }) {
   const [nombre, setNombre] = useState(grupo?.nombre ?? '');
-  const [obligatorio, setObligatorio] = useState(grupo?.obligatorio ?? false);
+  // Unidades en total del grupo (en blanco: mínimo 0 = opcional, máximo sin tope)
+  const [minimo, setMinimo] = useState(grupo && minimoDe(grupo) ? String(minimoDe(grupo)) : '');
+  const [maximo, setMaximo] = useState(grupo?.maximo ? String(grupo.maximo) : '');
+  const min = Number(minimo) || 0;
+  const max = maximo ? Math.max(1, Number(maximo) || 1) : null;
   const [opciones, setOpciones] = useState<OpcionForm[]>(
     grupo?.opciones.map((o) => ({
       id: o.id, nombre: o.nombre, precio: o.precio ? String(o.precio) : '', maximo: String(o.maximo ?? 1), producto_id: o.producto_id,
@@ -130,6 +135,7 @@ function FormGrupo({ grupo, datos, onCerrar, onListo }: { grupo: op.GrupoExtra |
   const error = !nombre.trim() ? 'Ponle un nombre al grupo'
     : !opciones.length ? 'Agrega al menos una opción'
       : opciones.some((o) => !o.nombre.trim()) ? 'Cada opción necesita un nombre'
+        : max !== null && min > max ? 'El mínimo no puede ser mayor que el máximo'
         : opciones.some((o) => o.producto_id && (!(Number(o.cantidad) > 0) || !o.unidad_medida_id)) ? 'Indica cuánto y en qué unidad gasta cada opción con insumo'
           : null;
 
@@ -137,7 +143,7 @@ function FormGrupo({ grupo, datos, onCerrar, onListo }: { grupo: op.GrupoExtra |
     setGuardando(true);
     try {
       const r = await op.guardarGrupoExtras({
-        nombre: nombre.trim(), obligatorio, productos,
+        nombre: nombre.trim(), obligatorio: min > 0, minimo: min, maximo: max, productos,
         opciones: opciones.map((o) => ({
           id: o.id, nombre: o.nombre.trim(), precio: Number(o.precio || 0), producto_id: o.producto_id,
           obligatorio: o.obligatorio, exclusiva: o.exclusiva, activo: o.activo,
@@ -178,7 +184,13 @@ function FormGrupo({ grupo, datos, onCerrar, onListo }: { grupo: op.GrupoExtra |
         </View>
       )}
       <Campo etiqueta="Nombre del grupo" value={nombre} onChangeText={setNombre} placeholder="Leche, Endulzante, Saborizante..." maxLength={80} />
-      <Interruptor titulo="Elegir al menos una" detalle="No deja agregar el producto sin marcar alguna opción del grupo (ej. Huevos: estrellados o revueltos)" valor={obligatorio} onCambiar={setObligatorio} />
+      <View style={{ flexDirection: 'row', gap: 8 }}>
+        <View style={{ flex: 1 }}><Campo etiqueta="Mínimo a elegir" value={minimo} onChangeText={(t) => setMinimo(t.replace(/[^0-9]/g, '').slice(0, 2))} keyboardType="number-pad" placeholder="0 (opcional)" /></View>
+        <View style={{ flex: 1 }}><Campo etiqueta="Máximo a elegir" value={maximo} onChangeText={(t) => setMaximo(t.replace(/[^0-9]/g, '').slice(0, 2))} keyboardType="number-pad" placeholder="Sin tope" /></View>
+      </View>
+      <Text style={e.suave}>{reglaTexto({ minimo: min, maximo: max })
+        ? `Al vender se verá: «${nombre.trim() || 'Grupo'}: ${reglaTexto({ minimo: min, maximo: max })}». Cuenta cada vez que se repite una opción.`
+        : 'En blanco: el grupo es opcional y sin tope. Ej.: Tipo de leche, mínimo 1 y máximo 2.'}</Text>
 
       <Seccion titulo="Opciones" />
       {opciones.map((o, i) => {

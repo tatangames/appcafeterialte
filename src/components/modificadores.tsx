@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Boton, Campo, Ventana } from '@/components/ui';
 import { C, radio } from '@/constants/colores';
 import { dinero } from '@/lib/formato';
+import { maximoDe, minimoDe, reglaTexto } from '@/lib/modificadores';
 import { GrupoModificador, ItemNuevo, ProductoMesa } from '@/lib/tipos';
 
 type Opcion = GrupoModificador['opciones'][number];
@@ -43,14 +44,23 @@ function Contenido({ producto, grupos, onCerrar, onAgregar, inicial }: Props & {
   // Un id repetido es la opción pedida varias veces (Huevo extra ×2): cobra cada una
   const veces = (id: number) => elegidos.filter((x) => x === id).length;
   const extra = suyos.flatMap((g) => g.opciones).reduce((t, o) => t + o.precio * veces(o.id), 0);
-  // Grupo obligatorio: hay que elegir al menos una de sus opciones (Huevos: cómo van)
-  const falta = suyos.find((g) => g.obligatorio && g.opciones.length > 0 && !g.opciones.some((o) => elegidos.includes(o.id)));
+  // Mínimo y máximo del grupo: unidades en total, contando repeticiones («Tipo de leche: de 1 a 2»)
+  const deGrupo = (g: GrupoModificador, lista: number[]) => lista.filter((id) => g.opciones.some((o) => o.id === id)).length;
+  const total = (g: GrupoModificador) => deGrupo(g, elegidos);
+  const lleno = (g: GrupoModificador) => maximoDe(g) !== null && total(g) >= (maximoDe(g) ?? 0);
+  const cabe = (g: GrupoModificador, lista: number[]) => maximoDe(g) === null || deGrupo(g, lista) <= (maximoDe(g) ?? 0);
+  const falta = suyos.find((g) => g.opciones.length > 0 && total(g) < minimoDe(g));
 
-  // Tocar marca o quita; una obligatoria no se quita
+  // Tocar marca o quita; una obligatoria no se quita. Con el grupo lleno y máximo 1, cambia por la nueva
   const tocar = (g: GrupoModificador, o: Opcion) =>
     setElegidos((actual) => {
       if (actual.includes(o.id)) return o.obligatorio ? actual : actual.filter((x) => x !== o.id);
-      return conOpcion(g, actual, o, 1);
+      const nueva = conOpcion(g, actual, o, 1);
+      if (cabe(g, nueva)) return nueva;
+      if (maximoDe(g) === 1 && !g.opciones.some((x) => x.obligatorio)) {
+        return [...actual.filter((id) => !g.opciones.some((x) => x.id === id)), o.id];
+      }
+      return actual;
     });
 
   // Opción con máximo (Huevo extra hasta 3): + y − cambian cuántas van
@@ -58,19 +68,23 @@ function Contenido({ producto, grupos, onCerrar, onAgregar, inicial }: Props & {
   const cambiarVeces = (g: GrupoModificador, o: Opcion, delta: number, maximo: number) =>
     setElegidos((actual) => {
       const nuevo = Math.min(maximo, Math.max(o.obligatorio ? 1 : 0, actual.filter((x) => x === o.id).length + delta));
-      return nuevo === 0 ? actual.filter((x) => x !== o.id) : conOpcion(g, actual, o, nuevo);
+      if (nuevo === 0) return actual.filter((x) => x !== o.id);
+      const lista = conOpcion(g, actual, o, nuevo);
+      return delta > 0 && !cabe(g, lista) ? actual : lista;
     });
 
   return (
     <Ventana visible titulo={producto.nombre} subtitulo={dinero(producto.precio + extra)} onCerrar={onCerrar} ancho={620}
       pie={
-        <Boton estilo={{ flex: 1 }} titulo={falta ? `Elige «${falta.nombre}»` : `${inicial ? 'Guardar' : 'Agregar'} ${cantidad} · ${dinero((producto.precio + extra) * cantidad)}`}
+        <Boton estilo={{ flex: 1 }} titulo={falta ? (minimoDe(falta) > 1 ? `«${falta.nombre}»: ${reglaTexto(falta)}` : `Elige «${falta.nombre}»`) : `${inicial ? 'Guardar' : 'Agregar'} ${cantidad} · ${dinero((producto.precio + extra) * cantidad)}`}
           deshabilitado={!!falta} variante="exito"
           onPress={() => onAgregar({ producto_id: producto.id, cantidad, modificadores: elegidos, notas: notas.trim() || undefined })} />
       }>
       {suyos.map((g) => (
         <View key={g.id} style={{ gap: 8 }}>
-          <Text style={e.grupo}>{g.nombre}{g.obligatorio ? <Text style={e.suave}>  elige al menos una</Text> : null}</Text>
+          <Text style={e.grupo}>{g.nombre}{reglaTexto(g)
+            ? <Text style={[e.suave, total(g) < minimoDe(g) && { color: C.peligro }]}>  {reglaTexto(g)}{maximoDe(g) !== null ? ` · llevas ${total(g)}` : ''}</Text>
+            : null}</Text>
           <View style={e.opciones}>
             {g.opciones.map((o) => {
               const activo = elegidos.includes(o.id);
@@ -81,21 +95,24 @@ function Contenido({ producto, grupos, onCerrar, onAgregar, inicial }: Props & {
                 const n = veces(o.id);
                 return (
                   <View key={o.id} style={[e.opcion, e.conCantidad, n > 0 && e.opcionActiva]}>
-                    <Pressable onPress={() => n === 0 && cambiarVeces(g, o, 1, maximo)} style={{ flexShrink: 1 }}>
+                    <Pressable onPress={() => n === 0 && cambiarVeces(g, o, 1, maximo)} style={{ flexShrink: 1 }}
+                      disabled={n === 0 && lleno(g) && !o.exclusiva}>
                       <Text style={[e.opcionTexto, n > 0 && { color: '#fff' }]}>{o.nombre}</Text>
                       <Text style={[e.suave, n > 0 && { color: '#E0F2FE' }]}>{o.precio > 0 ? `+${dinero(o.precio)} c/u · ` : ''}hasta {maximo}{o.obligatorio ? ' · siempre va' : ''}</Text>
                     </Pressable>
                     <Pressable style={[e.pasoChico, n <= (o.obligatorio ? 1 : 0) && { opacity: 0.35 }]} disabled={n <= (o.obligatorio ? 1 : 0)} onPress={() => cambiarVeces(g, o, -1, maximo)}
                       accessibilityLabel={`Quitar ${o.nombre}`}><Text style={e.pasoTexto}>−</Text></Pressable>
                     <Text style={[e.numeroChico, n > 0 && { color: '#fff' }]}>{n}</Text>
-                    <Pressable style={[e.pasoChico, n >= maximo && { opacity: 0.35 }]} disabled={n >= maximo} onPress={() => cambiarVeces(g, o, 1, maximo)}
+                    <Pressable style={[e.pasoChico, (n >= maximo || (lleno(g) && !o.exclusiva)) && { opacity: 0.35 }]} disabled={n >= maximo || (lleno(g) && !o.exclusiva)} onPress={() => cambiarVeces(g, o, 1, maximo)}
                       accessibilityLabel={`Agregar ${o.nombre}`}><Text style={e.pasoTexto}>+</Text></Pressable>
                   </View>
                 );
               }
+              // Grupo lleno (máximo 2 ya elegidos): hay que quitar otra antes; con máximo 1 se cambia sola
+              const bloqueada = !activo && lleno(g) && maximoDe(g) !== 1 && !o.exclusiva;
               return (
-                <Pressable key={o.id} onPress={() => !agotada && tocar(g, o)} disabled={agotada}
-                  style={[e.opcion, activo && e.opcionActiva, agotada && e.opcionAgotada]}>
+                <Pressable key={o.id} onPress={() => !agotada && tocar(g, o)} disabled={agotada || bloqueada}
+                  style={[e.opcion, activo && e.opcionActiva, agotada && e.opcionAgotada, bloqueada && { opacity: 0.45 }]}>
                   <Text style={[e.opcionTexto, activo && { color: '#fff' }, agotada && { color: C.suave, textDecorationLine: 'line-through' }]}>{o.nombre}</Text>
                   {agotada ? <Text style={e.agotado}>Agotado</Text>
                     : (o.precio > 0 || o.obligatorio) && <Text style={[e.suave, activo && { color: '#E0F2FE' }]}>

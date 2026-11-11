@@ -441,7 +441,7 @@ export interface OpcionExtra {
   producto_id: number | null; insumo?: string | null; cantidad: number | null; unidad_medida_id: number | null; unidad?: string | null;
 }
 export interface GrupoExtra {
-  id: number; nombre: string; obligatorio: boolean; multiple: boolean; activo: boolean;
+  id: number; nombre: string; obligatorio: boolean; multiple: boolean; activo: boolean; minimo?: number; maximo?: number | null;
   opciones: OpcionExtra[]; productos: { id: number; nombre: string }[];
 }
 export interface InsumoExtra { id: number; nombre: string; unidad_medida_id: number | null; unidad: string | null; tipo: string | null }
@@ -453,7 +453,9 @@ export const getGruposExtras = () => api.get<{
 
 export const guardarGrupoExtras = (datos: {
   nombre: string;
-  obligatorio: boolean; // hay que elegir al menos una opción del grupo
+  obligatorio: boolean;  // = minimo > 0 (para versiones anteriores)
+  minimo: number;        // unidades en total del grupo, contando repeticiones (0 = opcional)
+  maximo: number | null; // null = sin tope
   opciones: { id?: number; nombre: string; precio: number; maximo?: number; obligatorio: boolean; exclusiva: boolean; activo: boolean; producto_id: number | null; cantidad: number | null; unidad_medida_id: number | null }[];
   productos: number[];
 }, id?: number) => id ? api.put<{ message: string }>(`/mesas/config/modificadores/${id}`, datos) : api.post<{ message: string }>('/mesas/config/modificadores', datos);
