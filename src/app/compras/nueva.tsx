@@ -4,6 +4,7 @@ import { FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } fr
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Encabezado } from '@/components/encabezado';
+import { OpcionesBuscables } from '@/components/formulario';
 import { ProveedorForm } from '@/components/proveedorForm';
 import { Boton, Campo, Cargando, Ventana } from '@/components/ui';
 import { C, radio } from '@/constants/colores';
@@ -152,14 +153,9 @@ export default function NuevaCompra() {
                   <Text style={[e.lineaNombre, { flex: 1 }]}>{l.producto.nombre}</Text>
                   <Pressable onPress={() => setLineas((ls) => ls.filter((x) => x.clave !== l.clave))} hitSlop={8}><Text style={e.quitar}>Quitar</Text></Pressable>
                 </View>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
-                  {opcionesUnidad.map((u) => (
-                    <Pressable key={u.id} onPress={() => cambiar(l.clave, { unidadId: u.id, costo: costoSugerido(l.producto, u.id) })}
-                      style={[e.unidad, l.unidadId === u.id && e.opcionActiva]}>
-                      <Text style={[e.opcionTexto, l.unidadId === u.id && { color: '#fff' }]}>{u.nombre}</Text>
-                    </Pressable>
-                  ))}
-                </ScrollView>
+                {/* En qué viene: se busca («fardo», «quintal») cuando hay muchas */}
+                <OpcionesBuscables opciones={opcionesUnidad.map((u) => ({ valor: u.id, texto: u.nombre }))} valor={l.unidadId}
+                  onCambiar={(id) => cambiar(l.clave, { unidadId: id, costo: costoSugerido(l.producto, id) })} placeholder="Buscar unidad (fardo, quintal, galón...)" />
                 <View style={e.fila}>
                   <View style={{ flex: 1 }}><Campo etiqueta="Cantidad" value={l.cantidad} onChangeText={(v) => cambiar(l.clave, { cantidad: v })} keyboardType="decimal-pad" placeholder="¿Cuánto llegó?" style={!(Number(l.cantidad) > 0) ? { borderColor: C.peligro } : undefined} /></View>
                   <View style={{ flex: 1 }}><Campo etiqueta="Costo por unidad ($)" value={l.costo} onChangeText={(v) => cambiar(l.clave, { costo: v })} keyboardType="decimal-pad" /></View>

@@ -1,8 +1,9 @@
 // Piezas de formulario táctiles: opciones en botones y renglones con interruptor
 import { useState } from 'react';
-import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
 import { C, radio } from '@/constants/colores';
+import { sinTildes } from '@/lib/texto';
 
 /** Una o varias opciones como botones grandes (clase, unidad, categorías...). */
 export function Opciones<T extends string | number>({ opciones, valor, onCambiar, multiple }: {
@@ -19,6 +20,39 @@ export function Opciones<T extends string | number>({ opciones, valor, onCambiar
           <Text style={[e.chipTexto, activo(o.valor) && { color: '#fff' }]}>{multiple && activo(o.valor) ? '✓ ' : ''}{o.texto}</Text>
         </Pressable>
       ))}
+    </View>
+  );
+}
+
+/**
+ * Como Opciones, pero con buscador cuando son muchas (unidades de medida): se escribe «fardo» o
+ * «lb» y quedan solo las que coinciden. Con pocas opciones se ven todas como botones.
+ */
+export function OpcionesBuscables<T extends string | number>({ opciones, valor, onCambiar, placeholder = 'Buscar...', hasta = 6 }: {
+  opciones: { valor: T; texto: string; detalle?: string }[];
+  valor: T | null;
+  onCambiar: (v: T) => void;
+  placeholder?: string;
+  hasta?: number; // con más opciones que esto sale el buscador
+}) {
+  const [buscar, setBuscar] = useState('');
+  if (opciones.length <= hasta) return <Opciones opciones={opciones} valor={valor} onCambiar={onCambiar} />;
+
+  const t = sinTildes(buscar.trim());
+  const elegida = opciones.find((o) => o.valor === valor);
+  const coinciden = t ? opciones.filter((o) => sinTildes(`${o.texto} ${o.detalle ?? ''}`).includes(t)) : opciones;
+  // Sin buscar: la elegida primero y unas cuantas más
+  const visibles = (t ? coinciden : [...(elegida ? [elegida] : []), ...opciones.filter((o) => o !== elegida)]).slice(0, 8);
+  const faltan = coinciden.length - visibles.length;
+
+  return (
+    <View style={{ gap: 8 }}>
+      <TextInput style={e.buscar} value={buscar} onChangeText={setBuscar} placeholder={placeholder} placeholderTextColor={C.tenue}
+        autoCorrect={false} autoCapitalize="none" />
+      <Opciones opciones={visibles.map((o) => ({ valor: o.valor, texto: o.detalle ? `${o.texto} · ${o.detalle}` : o.texto }))}
+        valor={valor} onCambiar={(v) => { onCambiar(v); setBuscar(''); }} />
+      {!!t && coinciden.length === 0 && <Text style={e.nota}>Ninguna coincide con «{buscar.trim()}».</Text>}
+      {faltan > 0 && <Text style={e.nota}>{t ? `${faltan} más: escribe un poco más.` : `Hay ${faltan} más: escribe para buscarlas.`}</Text>}
     </View>
   );
 }
@@ -69,6 +103,8 @@ export function Seccion({ titulo }: { titulo: string }) {
 }
 
 const e = StyleSheet.create({
+  buscar: { height: 46, borderWidth: 1, borderColor: '#D1D5DB', borderRadius: radio, paddingHorizontal: 14, fontSize: 15, backgroundColor: '#fff', color: C.texto },
+  nota: { fontSize: 12, color: C.suave },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { paddingHorizontal: 14, minHeight: 44, justifyContent: 'center', borderRadius: 999, backgroundColor: '#fff', borderWidth: 1, borderColor: C.borde },
   chipActivo: { backgroundColor: C.texto, borderColor: C.texto },

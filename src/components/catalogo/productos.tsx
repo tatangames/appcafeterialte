@@ -4,7 +4,7 @@ import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-na
 
 import { AyudaClases } from '@/components/catalogo/ayudaClases';
 import { BloquesProducto } from '@/components/catalogo/bloquesProducto';
-import { Interruptor, Opciones, Seccion } from '@/components/formulario';
+import { Interruptor, Opciones, OpcionesBuscables, Seccion } from '@/components/formulario';
 import { Boton, Campo, Etiqueta, Ventana } from '@/components/ui';
 import { C, radio } from '@/constants/colores';
 import { mensajeError } from '@/lib/api';
@@ -150,7 +150,8 @@ function FormProducto({ producto, onCerrar, onGuardado }: { producto: op.Product
     }
   };
 
-  const porTipo = (t: string) => unidades.filter((u) => u.tipo === t).map((u) => ({ valor: u.id, texto: u.abreviatura ? `${u.nombre} (${u.abreviatura})` : u.nombre }));
+  const TIPO_UNIDAD: Record<string, string> = { unidad: 'por unidad', masa: 'peso', volumen: 'volumen' };
+  const opcionesUnidad = unidades.map((u) => ({ valor: u.id, texto: u.abreviatura ? `${u.nombre} (${u.abreviatura})` : u.nombre, detalle: TIPO_UNIDAD[u.tipo] ?? u.tipo }));
 
   return (
     <Ventana visible titulo={producto ? `Editar ${producto.nombre}` : 'Nuevo producto'} onCerrar={onCerrar} ancho={760}
@@ -176,9 +177,8 @@ function FormProducto({ producto, onCerrar, onGuardado }: { producto: op.Product
         onCambiar={(c) => cambiar({ clase: c, ...(producto ? {} : sugeridoPorClase(c)) })} />
 
       <Seccion titulo="Unidad de medida *" />
-      {(['unidad', 'masa', 'volumen'] as const).map((t) => porTipo(t).length > 0 && (
-        <Opciones key={t} opciones={porTipo(t)} valor={d.unidad_medida_id} onCambiar={(id) => cambiar({ unidad_medida_id: id })} />
-      ))}
+      <OpcionesBuscables opciones={opcionesUnidad} valor={d.unidad_medida_id} onCambiar={(id) => cambiar({ unidad_medida_id: id })}
+        placeholder="Buscar unidad (libra, ml, fardo...)" />
       <Text style={e.suave}>Consejo: los insumos que se gastan por poquito (azúcar, leche) conviene llevarlos en gramos o mililitros.</Text>
 
       <Seccion titulo="Cómo se maneja" />

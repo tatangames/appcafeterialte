@@ -3,7 +3,7 @@ import { router, type Href } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { Opciones, Seccion } from '@/components/formulario';
+import { Opciones, OpcionesBuscables, Seccion } from '@/components/formulario';
 import { Boton, Campo, Etiqueta, Ventana } from '@/components/ui';
 import { C, radio } from '@/constants/colores';
 import { mensajeError } from '@/lib/api';
@@ -294,7 +294,10 @@ function FormReceta({ receta, catalogo, onCerrar, onListo }: { receta: op.Receta
             </View>
             <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               <View style={{ width: 110 }}><Campo value={i.cantidad} onChangeText={(t) => cambiar(n, { cantidad: t.replace(/[^0-9.]/g, '') })} keyboardType="decimal-pad" placeholder="Cantidad" /></View>
-              <Opciones opciones={tipos.map((u) => ({ valor: u.id, texto: u.abreviatura ?? u.nombre }))} valor={i.unidad_medida_id} onCambiar={(id) => cambiar(n, { unidad_medida_id: id })} />
+              <View style={{ flexBasis: '100%' }}>
+                <OpcionesBuscables opciones={tipos.map((u) => ({ valor: u.id, texto: u.abreviatura ?? u.nombre, detalle: u.abreviatura ? u.nombre : undefined }))}
+                  valor={i.unidad_medida_id} onCambiar={(id) => cambiar(n, { unidad_medida_id: id })} placeholder="Buscar unidad" />
+              </View>
               <View style={{ width: 110 }}><Campo value={i.merma} onChangeText={(t) => cambiar(n, { merma: t.replace(/[^0-9.]/g, '') })} keyboardType="decimal-pad" placeholder="% merma" /></View>
             </View>
           </View>

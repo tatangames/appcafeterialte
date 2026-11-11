@@ -4,7 +4,7 @@
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { Interruptor, Opciones } from '@/components/formulario';
+import { Interruptor, Opciones, OpcionesBuscables } from '@/components/formulario';
 import { Boton, Campo, Etiqueta, Ventana } from '@/components/ui';
 import { C, radio } from '@/constants/colores';
 import { mensajeError } from '@/lib/api';
@@ -220,7 +220,10 @@ export function FormConjunto({ producto, conjunto, datos, onCerrar, onListo }: {
                       </View>
                       <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                         <View style={{ width: 120 }}><Campo value={o.cantidad} onChangeText={(t) => cambiarOpcion(n, k, { cantidad: t.replace(/[^0-9.]/g, '') })} keyboardType="decimal-pad" placeholder="Cantidad" /></View>
-                        <Opciones opciones={unidadesInsumo.map((u) => ({ valor: u.id, texto: u.abreviatura ?? u.nombre }))} valor={o.unidad_medida_id} onCambiar={(id) => cambiarOpcion(n, k, { unidad_medida_id: id })} />
+                        <View style={{ flexBasis: '100%' }}>
+                          <OpcionesBuscables opciones={unidadesInsumo.map((u) => ({ valor: u.id, texto: u.abreviatura ?? u.nombre, detalle: u.abreviatura ? u.nombre : undefined }))}
+                            valor={o.unidad_medida_id} onCambiar={(id) => cambiarOpcion(n, k, { unidad_medida_id: id })} placeholder="Buscar unidad" />
+                        </View>
                       </View>
                     </>
                   ) : eligiendoInsumo === clave ? (
