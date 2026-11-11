@@ -228,7 +228,7 @@ function FormProducto({ producto, onCerrar, onGuardado }: { producto: op.Product
       {(d.se_vende || d.consumo_interno) && puede('mesas.configurar') && (
         <>
           <Seccion titulo="Extras (modificadores)" />
-          {producto ? <BloquesProducto productoId={producto.id} />
+          {producto ? <BloquesProducto productoId={producto.id} nombre={producto.nombre} />
             : <Text style={e.suave}>Guarda el producto primero; después, al editarlo, aquí le agregas sus extras.</Text>}
         </>
       )}

@@ -1,6 +1,6 @@
-// Extras (modificadores) en tarjetas, como en las apps de delivery: una tarjeta («Bebidas con leche»)
-// tiene sus bloques en orden (Tipo de leche, Azúcar, Extras), cada uno requerido u opcional con
-// mínimo y máximo, y sus opciones con precio e insumo. Cada producto lleva una sola tarjeta.
+// Extras (modificadores) de cada producto, en bloques como en las apps de delivery: Tipo de leche,
+// Azúcar, Extras; cada bloque requerido u opcional con mínimo y máximo, y sus opciones con precio e
+// insumo. Son solo de ese producto: cambiarlos no toca a ningún otro (se pueden copiar de otro).
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -48,7 +48,7 @@ export function VistaTarjeta({ conjunto }: { conjunto: op.ConjuntoExtra }) {
 
 export function ExtrasCatalogo() {
   const [datos, setDatos] = useState<DatosExtras | null>(null);
-  // undefined: cerrado; null: tarjeta nueva
+  // undefined: cerrado; null: agregar a un producto que aún no tiene
   const [editando, setEditando] = useState<op.ConjuntoExtra | null | undefined>(undefined);
   const [buscar, setBuscar] = useState('');
 
@@ -62,17 +62,17 @@ export function ExtrasCatalogo() {
     const t = sinTildes(buscar.trim());
     const lista = datos?.conjuntos ?? [];
     if (!t) return lista;
-    return lista.filter((c) => [c.nombre, ...c.bloques.flatMap((b) => [b.nombre, ...b.opciones.map((o) => o.nombre)]), ...c.productos.map((p) => p.nombre)]
+    return lista.filter((c) => [c.producto, ...c.bloques.flatMap((b) => [b.nombre, ...b.opciones.map((o) => o.nombre)])]
       .some((texto) => sinTildes(texto).includes(t)));
   }, [datos, buscar]);
 
-  const borrar = async (c: op.ConjuntoExtra) => {
-    if (!(await confirmar(`¿Borrar «${c.nombre}»?`, c.productos.length ? `Quedan sin extras: ${c.productos.map((p) => p.nombre).join(', ')}. Las ventas anteriores no cambian.` : 'No está en ningún producto.', 'Borrar'))) return;
+  const quitar = async (c: op.ConjuntoExtra) => {
+    if (!(await confirmar(`¿Quitar los extras de «${c.producto}»?`, 'Se venderá sin elegir nada. Los demás productos no cambian.', 'Quitar'))) return;
     try {
-      avisar((await op.borrarConjuntoExtras(c.id)).message);
+      avisar((await op.quitarExtrasProducto(c.producto_id)).message);
       cargar();
     } catch (err) {
-      avisar('No se pudo borrar', mensajeError(err));
+      avisar('No se pudo quitar', mensajeError(err));
     }
   };
 
@@ -80,30 +80,30 @@ export function ExtrasCatalogo() {
     <ScrollView contentContainerStyle={e.contenido}>
       <View style={e.cabecera}>
         <Text style={[e.suave, { flex: 1 }]}>
-          Cada tarjeta junta lo que se elige al vender un producto (tipo de leche, azúcar, extras), en bloques. Un producto lleva una sola tarjeta.
+          Productos con extras: lo que se elige al venderlos (tipo de leche, azúcar...), en bloques. Los de cada producto son solo suyos.
         </Text>
-        <Boton titulo="+ Tarjeta" onPress={() => setEditando(null)} />
+        <Boton titulo="+ Agregar a un producto" onPress={() => setEditando(null)} />
       </View>
       {(datos?.conjuntos.length ?? 0) > 0 && (
-        <TextInput style={e.buscar} value={buscar} onChangeText={setBuscar} placeholder="Buscar tarjeta, bloque, opción o producto"
+        <TextInput style={e.buscar} value={buscar} onChangeText={setBuscar} placeholder="Buscar producto, bloque u opción"
           placeholderTextColor={C.tenue} autoCorrect={false} />
       )}
       {!datos && <Text style={e.suave}>Cargando...</Text>}
-      {datos?.conjuntos.length === 0 && <Text style={e.vacio}>Todavía no hay extras. Crea una tarjeta, por ejemplo «Bebidas con leche».</Text>}
-      {datos && datos.conjuntos.length > 0 && visibles.length === 0 && <Text style={e.vacio}>Ninguna tarjeta coincide con «{buscar.trim()}».</Text>}
+      {datos?.conjuntos.length === 0 && <Text style={e.vacio}>Ningún producto tiene extras todavía. Agrégale al Chocolate sus bloques: Tipo de leche, Azúcar, Extras.</Text>}
+      {datos && datos.conjuntos.length > 0 && visibles.length === 0 && <Text style={e.vacio}>Nada coincide con «{buscar.trim()}».</Text>}
       {visibles.map((c) => (
         <View key={c.id} style={e.tarjeta}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Text style={[e.titulo, { flex: 1 }]}>{c.nombre}</Text>
+            <Text style={[e.titulo, { flex: 1 }]}>{c.producto}</Text>
             <Boton titulo="Editar" variante="contorno" chico onPress={() => setEditando(c)} />
-            <Boton titulo="Borrar" variante="contorno" chico onPress={() => borrar(c)} />
+            <Boton titulo="Quitar" variante="contorno" chico onPress={() => quitar(c)} />
           </View>
           <VistaTarjeta conjunto={c} />
-          <Text style={e.suave}>{c.productos.length ? `En: ${c.productos.map((p) => p.nombre).join(', ')}` : 'No está asignada a ningún producto'}</Text>
         </View>
       ))}
       {editando !== undefined && datos && (
-        <FormConjunto conjunto={editando} datos={datos} onCerrar={() => setEditando(undefined)} onListo={() => { setEditando(undefined); cargar(); }} />
+        <FormConjunto producto={editando ? { id: editando.producto_id, nombre: editando.producto } : null} conjunto={editando} datos={datos}
+          onCerrar={() => setEditando(undefined)} onListo={() => { setEditando(undefined); cargar(); }} />
       )}
     </ScrollView>
   );
@@ -119,11 +119,12 @@ const opcionVacia = (): OpcionForm => ({ nombre: '', precio: '', maximo: '1', ob
 let siguiente = 0;
 const bloqueVacio = (): BloqueForm => ({ clave: `n${++siguiente}`, nombre: '', minimo: '', maximo: '', opciones: [opcionVacia()] });
 
-const aBloques = (c: op.ConjuntoExtra | null): BloqueForm[] => c ? c.bloques.map((g) => ({
-  clave: `g${g.id}`, id: g.id, nombre: g.nombre,
+// copia: los bloques de otro producto sin sus ids, así se guardan como propios
+const aBloques = (c: op.ConjuntoExtra | null, copia = false): BloqueForm[] => c ? c.bloques.map((g) => ({
+  clave: `n${++siguiente}`, id: copia ? undefined : g.id, nombre: g.nombre,
   minimo: minimoDe(g) ? String(minimoDe(g)) : '', maximo: g.maximo ? String(g.maximo) : '',
-  opciones: g.opciones.map((o) => ({
-    id: o.id, nombre: o.nombre, precio: o.precio ? String(o.precio) : '', maximo: String(o.maximo ?? 1), producto_id: o.producto_id,
+  opciones: g.opciones.filter((o) => !copia || o.activo !== false).map((o) => ({
+    id: copia ? undefined : o.id, nombre: o.nombre, precio: o.precio ? String(o.precio) : '', maximo: String(o.maximo ?? 1), producto_id: o.producto_id,
     obligatorio: !!o.obligatorio, exclusiva: !!o.exclusiva, activo: o.activo !== false,
     cantidad: o.cantidad ? String(o.cantidad) : '', unidad_medida_id: o.unidad_medida_id,
   })),
@@ -131,19 +132,27 @@ const aBloques = (c: op.ConjuntoExtra | null): BloqueForm[] => c ? c.bloques.map
 
 // «¿Cómo funciona?» (la misma explicación que la web)
 const AYUDA = [
-  'Una tarjeta junta todo lo que se elige al vender un producto. Ej.: «Bebidas con leche» con los bloques 1. Tipo de leche (requerido, elige 1), 2. Azúcar (opcional, máximo 1) y 3. Extras (opcional). Se asigna a los productos; cada producto lleva una sola tarjeta.',
+  'Los extras de cada producto van en bloques, como en las apps de delivery. Ej.: el Chocolate con 1. Tipo de leche (requerido, elige 1), 2. Azúcar (opcional, máximo 1) y 3. Extras (opcional). Son solo de este producto: cambiarlos no toca a ningún otro. Para no escribirlos de nuevo, usa «Copiar de otro producto».',
   'Requerido: no deja agregar el producto hasta elegir el mínimo. Opcional: se puede dejar sin elegir. Mínimo y máximo cuentan las opciones del bloque en total, contando cada vez que se repite una. Con máximo 1, tocar otra opción la cambia.',
   'Precio extra: se suma al producto (Deslactosada +$0.25). En blanco: gratis. Insumo: lo que se descuenta del inventario al venderse con esa opción (Leche entera 250 ml).',
   'Casillas de cada opción: Obligatorio siempre va marcada; Una sola al elegirla quita todas las demás del bloque; Activa apagada no sale al vender.',
 ];
 
-/** Crear o editar una tarjeta de extras. productosIniciales: una nueva creada desde un producto ya lo lleva. */
-export function FormConjunto({ conjunto, datos, onCerrar, onListo, productosIniciales = [] }: {
-  conjunto: op.ConjuntoExtra | null; datos: DatosExtras; onCerrar: () => void; onListo: (id?: number) => void; productosIniciales?: number[];
+/** Crear o editar los extras de un producto. producto null: se elige aquí (uno que aún no tenga). */
+export function FormConjunto({ producto, conjunto, datos, onCerrar, onListo }: {
+  producto: { id: number; nombre: string } | null; conjunto: op.ConjuntoExtra | null; datos: DatosExtras; onCerrar: () => void; onListo: () => void;
 }) {
-  const [nombre, setNombre] = useState(conjunto?.nombre ?? '');
+  const [productoId, setProductoId] = useState<number | null>(producto?.id ?? null);
   const [bloques, setBloques] = useState<BloqueForm[]>(() => aBloques(conjunto));
-  const [productos, setProductos] = useState<number[]>(conjunto?.productos.map((p) => p.id) ?? productosIniciales);
+  const [copiando, setCopiando] = useState(false);
+  const nombreProducto = producto?.nombre ?? datos.productos.find((p) => p.id === productoId)?.nombre;
+  const otros = datos.conjuntos.filter((c) => c.producto_id !== productoId);
+  const copiarDe = async (c: op.ConjuntoExtra) => {
+    const conAlgo = bloques.some((b) => b.nombre.trim() || b.opciones.some((o) => o.nombre.trim()));
+    if (conAlgo && !(await confirmar(`¿Usar los extras de «${c.producto}»?`, 'Reemplaza los bloques de aquí. Después puedes cambiarlos: son solo de este producto.', 'Copiar'))) return;
+    setBloques(aBloques(c, true));
+    setCopiando(false);
+  };
   const [eligiendoInsumo, setEligiendoInsumo] = useState<string | null>(null); // «bloque-opción»
   const [buscarInsumo, setBuscarInsumo] = useState('');
   const [buscarProducto, setBuscarProducto] = useState('');
@@ -163,18 +172,14 @@ export function FormConjunto({ conjunto, datos, onCerrar, onListo, productosInic
     const t = sinTildes(buscarInsumo.trim());
     return datos.insumos.filter((x) => !t || sinTildes(x.nombre).includes(t)).slice(0, 8);
   }, [buscarInsumo, datos.insumos]);
-  // Cada producto lleva una sola tarjeta: los que ya tienen otra no se pueden agregar aquí
-  const tarjetaDe = (productoId: number) => {
-    const id = datos.productos.find((p) => p.id === productoId)?.conjunto_id;
-    return id && id !== conjunto?.id ? datos.conjuntos.find((c) => c.id === id)?.nombre ?? 'otra tarjeta' : null;
-  };
+  // Para elegir el producto: solo los que aún no tienen extras
   const productosVisibles = useMemo(() => {
     const t = sinTildes(buscarProducto.trim());
-    return t ? datos.productos.filter((p) => sinTildes(p.nombre).includes(t) && !productos.includes(p.id)).slice(0, 8) : [];
-  }, [buscarProducto, datos.productos, productos]);
+    return datos.productos.filter((p) => !p.conjunto_id && (!t || sinTildes(p.nombre).includes(t))).slice(0, 8);
+  }, [buscarProducto, datos.productos]);
 
   const malo = bloques.find((b) => b.maximo !== '' && (Number(b.minimo) || 0) > Number(b.maximo));
-  const error = !nombre.trim() ? 'Ponle un nombre a la tarjeta'
+  const error = !productoId ? 'Elige el producto'
     : !bloques.length ? 'Agrega al menos un bloque'
       : bloques.some((b) => !b.nombre.trim()) ? 'Cada bloque necesita un nombre'
         : bloques.some((b) => !b.opciones.length || b.opciones.some((o) => !o.nombre.trim())) ? 'Cada bloque necesita opciones con nombre'
@@ -185,9 +190,7 @@ export function FormConjunto({ conjunto, datos, onCerrar, onListo, productosInic
   const guardar = async () => {
     setGuardando(true);
     try {
-      const r = await op.guardarConjuntoExtras({
-        nombre: nombre.trim(), productos,
-        bloques: bloques.map((b) => ({
+      const r = await op.guardarExtrasProducto(productoId!, bloques.map((b) => ({
           id: b.id, nombre: b.nombre.trim(),
           minimo: Number(b.minimo) || 0, maximo: b.maximo ? Math.max(1, Number(b.maximo) || 1) : null,
           opciones: b.opciones.map((o) => ({
@@ -196,10 +199,9 @@ export function FormConjunto({ conjunto, datos, onCerrar, onListo, productosInic
             maximo: Math.min(20, Math.max(1, Math.floor(Number(o.maximo) || 1))),
             cantidad: o.producto_id ? Number(o.cantidad) : null, unidad_medida_id: o.producto_id ? o.unidad_medida_id : null,
           })),
-        })),
-      }, conjunto?.id);
+        })));
       avisar(r.message ?? 'Extras guardados');
-      onListo(r.id ?? conjunto?.id);
+      onListo();
     } catch (err) {
       avisar('No se pudo guardar', mensajeError(err));
     } finally {
@@ -208,11 +210,11 @@ export function FormConjunto({ conjunto, datos, onCerrar, onListo, productosInic
   };
 
   return (
-    <Ventana visible titulo={conjunto ? `Editar ${conjunto.nombre}` : 'Nueva tarjeta de extras'} onCerrar={onCerrar} ancho={820}
+    <Ventana visible titulo={nombreProducto ? `Extras de ${nombreProducto}` : 'Agregar extras a un producto'} onCerrar={onCerrar} ancho={820}
       pie={
         <View style={{ flex: 1, gap: 6 }}>
           {error && <Text style={{ color: C.peligro }}>{error}</Text>}
-          <Boton titulo="Guardar tarjeta" cargando={guardando} deshabilitado={!!error} onPress={guardar} />
+          <Boton titulo="Guardar extras" cargando={guardando} deshabilitado={!!error} onPress={guardar} />
         </View>
       }>
       <Pressable onPress={() => setVerAyuda((v) => !v)} hitSlop={8} accessibilityLabel="¿Cómo funciona?"
@@ -224,9 +226,40 @@ export function FormConjunto({ conjunto, datos, onCerrar, onListo, productosInic
           {AYUDA.map((l) => <Text key={l} style={e.ayudaTexto}>{l}</Text>)}
         </View>
       )}
-      <Campo etiqueta="Nombre de la tarjeta (no lo ve el mesero)" value={nombre} onChangeText={setNombre} placeholder="Bebidas con leche" maxLength={80} />
-      {conjunto && conjunto.productos.length > 1 && (
-        <Text style={[e.suave, { color: '#92400E' }]}>La llevan {conjunto.productos.length} productos: lo que cambies aquí cambia en todos.</Text>
+      {!producto && (
+        <View style={{ gap: 6 }}>
+          <Seccion titulo="Producto" />
+          {productoId ? (
+            <View style={e.chips}>
+              <Pressable onPress={() => setProductoId(null)} style={e.chipActivo}>
+                <Text style={{ color: '#fff', fontWeight: '600' }}>{nombreProducto} ✕</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <>
+              <TextInput style={e.buscar} value={buscarProducto} onChangeText={setBuscarProducto} placeholder="Buscar producto (solo los que aún no tienen extras)" placeholderTextColor={C.tenue} />
+              {productosVisibles.map((p) => (
+                <Pressable key={p.id} style={e.resultado} onPress={() => { setProductoId(p.id); setBuscarProducto(''); }}>
+                  <Text style={e.texto}>{p.nombre}</Text>
+                </Pressable>
+              ))}
+            </>
+          )}
+        </View>
+      )}
+      {otros.length > 0 && (
+        copiando ? (
+          <View style={{ gap: 6 }}>
+            <Text style={e.suave}>Copiar los bloques de (después se cambian sin tocar al otro producto):</Text>
+            {otros.map((c) => (
+              <Pressable key={c.id} style={e.resultado} onPress={() => copiarDe(c)}>
+                <Text style={e.texto}>{c.producto}</Text>
+                <Text style={e.suave}>{c.bloques.map((b) => b.nombre).join(' · ')}</Text>
+              </Pressable>
+            ))}
+            <Pressable onPress={() => setCopiando(false)}><Text style={e.suave}>Cancelar</Text></Pressable>
+          </View>
+        ) : <Boton titulo="Copiar de otro producto" variante="contorno" chico onPress={() => setCopiando(true)} />
       )}
 
       {bloques.map((b, n) => {
@@ -304,26 +337,6 @@ export function FormConjunto({ conjunto, datos, onCerrar, onListo, productosInic
       })}
       <Boton titulo="+ Agregar bloque" variante="contorno" onPress={() => setBloques((bs) => [...bs, bloqueVacio()])} />
 
-      <Seccion titulo="Productos que la llevan" />
-      <View style={e.chips}>
-        {productos.map((id) => (
-          <Pressable key={id} onPress={() => setProductos((ps) => ps.filter((x) => x !== id))} style={e.chipActivo}>
-            <Text style={{ color: '#fff', fontWeight: '600' }}>{datos.productos.find((p) => p.id === id)?.nombre ?? `#${id}`} ✕</Text>
-          </Pressable>
-        ))}
-        {productos.length === 0 && <Text style={e.suave}>Ninguno todavía: búscalos abajo.</Text>}
-      </View>
-      <TextInput style={e.buscar} value={buscarProducto} onChangeText={setBuscarProducto} placeholder="Buscar producto para asignarla (Chocolate, Café...)" placeholderTextColor={C.tenue} />
-      {productosVisibles.map((p) => {
-        const otra = tarjetaDe(p.id);
-        return (
-          <Pressable key={p.id} style={[e.resultado, !!otra && { opacity: 0.5 }]} disabled={!!otra}
-            onPress={() => { setProductos((ps) => [...ps, p.id]); setBuscarProducto(''); }}>
-            <Text style={e.texto}>+ {p.nombre}</Text>
-            {otra && <Text style={e.suave}>ya lleva «{otra}»</Text>}
-          </Pressable>
-        );
-      })}
     </Ventana>
   );
 }
