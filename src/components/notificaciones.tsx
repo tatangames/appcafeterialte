@@ -1,4 +1,4 @@
-// Pinta los avisos de notificar() arriba al centro. Está en la raíz y dentro de cada Ventana
+// Pinta los avisos de notificar() abajo al centro. Está en la raíz y dentro de cada Ventana
 // (un Modal tapa lo de abajo), así se ven aunque haya una ventana abierta.
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -22,7 +22,7 @@ export function Notificaciones() {
 }
 
 const e = StyleSheet.create({
-  pila: { position: 'absolute', top: 24, left: 16, right: 16, alignItems: 'center', gap: 8, zIndex: 1000 },
+  pila: { position: 'absolute', bottom: 32, left: 16, right: 16, alignItems: 'center', gap: 8, zIndex: 1000 },
   aviso: { maxWidth: 520, paddingHorizontal: 18, paddingVertical: 12, borderRadius: radio, backgroundColor: C.exito,
     shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 8, elevation: 8 },
   texto: { color: '#fff', fontSize: 15, fontWeight: '700' },
