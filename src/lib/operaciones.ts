@@ -444,7 +444,7 @@ export interface GrupoExtra {
   id: number; nombre: string; obligatorio: boolean; multiple: boolean; activo: boolean; minimo?: number; maximo?: number | null;
   opciones: OpcionExtra[]; productos: { id: number; nombre: string }[];
 }
-export interface InsumoExtra { id: number; nombre: string; unidad_medida_id: number | null; unidad: string | null; tipo: string | null }
+export interface InsumoExtra { id: number; nombre: string; unidad_medida_id: number | null; unidad: string | null; tipo: string | null; clase?: string }
 
 // Los extras propios de un producto: sus bloques en orden (Tipo de leche, Azúcar, Extras)
 export interface ConjuntoExtra { id: number; producto_id: number; producto: string; bloques: GrupoExtra[] }

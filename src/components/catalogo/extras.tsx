@@ -231,7 +231,11 @@ export function FormConjunto({ producto, conjunto, datos, onCerrar, onListo }: {
                       <TextInput style={e.buscar} value={buscarInsumo} onChangeText={setBuscarInsumo} placeholder="Buscar insumo (leche, jarabe...)" placeholderTextColor={C.tenue} autoFocus />
                       {insumosVisibles.map((x) => (
                         <Pressable key={x.id} style={e.resultado} onPress={() => { cambiarOpcion(n, k, { producto_id: x.id, unidad_medida_id: x.unidad_medida_id }); setEligiendoInsumo(null); setBuscarInsumo(''); }}>
-                          <Text style={e.texto}>{x.nombre}</Text><Text style={e.suave}>{x.unidad ?? ''}</Text>
+                          <View style={{ flex: 1 }}>
+                            <Text style={e.texto}>{x.nombre}</Text>
+                            {!!x.clase && <Text style={e.clase}>{op.CLASES[x.clase] ?? x.clase}</Text>}
+                          </View>
+                          <Text style={e.suave}>{x.unidad ?? ''}</Text>
                         </Pressable>
                       ))}
                       <Pressable onPress={() => setEligiendoInsumo(null)}><Text style={e.suave}>Cancelar</Text></Pressable>
@@ -285,7 +289,8 @@ const e = StyleSheet.create({
   enlace: { fontSize: 14, fontWeight: '700', color: C.primario },
   opcion: { gap: 8, padding: 12, borderRadius: radio, borderWidth: 1, borderColor: C.borde, backgroundColor: '#FAFAFA' },
   buscar: { height: 48, borderWidth: 1, borderColor: '#D1D5DB', borderRadius: radio, paddingHorizontal: 14, fontSize: 16, backgroundColor: '#fff', color: C.texto },
-  resultado: { flexDirection: 'row', justifyContent: 'space-between', padding: 12, borderRadius: radio, borderWidth: 1, borderColor: C.borde, backgroundColor: '#fff' },
+  clase: { fontSize: 11, color: C.suave, marginTop: 1 },
+  resultado: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12, borderRadius: radio, borderWidth: 1, borderColor: C.borde, backgroundColor: '#fff' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center' },
   chipActivo: { paddingHorizontal: 14, minHeight: 40, justifyContent: 'center', borderRadius: 999, backgroundColor: C.texto },
 });
