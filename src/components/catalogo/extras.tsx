@@ -9,9 +9,10 @@ import { Boton, Campo, Etiqueta, Ventana } from '@/components/ui';
 import { C, radio } from '@/constants/colores';
 import { mensajeError } from '@/lib/api';
 import { avisar } from '@/lib/aviso';
+import { notificar } from '@/lib/notificacion';
 import { dinero } from '@/lib/formato';
 import * as op from '@/lib/operaciones';
-import { minimoDe, reglaTexto } from '@/lib/modificadores';
+import { AYUDAS, ClaveAyuda, minimoDe, reglaTexto } from '@/lib/modificadores';
 import { sinTildes } from '@/lib/texto';
 
 export type DatosExtras = Awaited<ReturnType<typeof op.getGruposExtras>>;
@@ -75,6 +76,33 @@ const AYUDA = [
   'Casillas de cada opción: Obligatorio siempre va marcada; Una sola al elegirla quita todas las demás del bloque; Activa apagada no sale al vender.',
 ];
 
+/** Botones «? Una sola», «? Activa»...: al tocar uno sale su explicación debajo; otra vez la cierra. */
+function FilaAyuda({ claves, lugar, abierta, onAbrir }: { claves: ClaveAyuda[]; lugar: string; abierta: string | null; onAbrir: (v: string | null) => void }) {
+  const actual = abierta?.startsWith(`${lugar}:`) ? AYUDAS[abierta.slice(lugar.length + 1) as ClaveAyuda] : null;
+  return (
+    <View style={{ gap: 6 }}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+        {claves.map((c) => {
+          const id = `${lugar}:${c}`;
+          const activa = abierta === id;
+          return (
+            <Pressable key={c} onPress={() => onAbrir(activa ? null : id)} hitSlop={4} style={[e.chipAyuda, activa && e.chipAyudaActivo]}
+              accessibilityLabel={`Ayuda: ${AYUDAS[c].titulo}`}>
+              <Text style={[e.chipAyudaTexto, activa && { color: '#fff' }]}>? {AYUDAS[c].titulo}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+      {actual && (
+        <View style={e.ayudaCaja}>
+          <Text style={e.ayudaTexto}><Text style={{ fontWeight: '700' }}>{actual.titulo}:</Text> {actual.texto}</Text>
+          <Text style={e.ayudaTexto}>Ej.: {actual.ejemplo}</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
 /**
  * Crear o editar los extras de un producto. Producto ya guardado (id): se guardan aquí. Producto
  * nuevo (id null): se devuelven y se guardan junto con él.
@@ -88,6 +116,7 @@ export function FormConjunto({ producto, conjunto, datos, onCerrar, onListo }: {
   const [buscarInsumo, setBuscarInsumo] = useState('');
   const [guardando, setGuardando] = useState(false);
   const [verAyuda, setVerAyuda] = useState(false);
+  const [ayuda, setAyuda] = useState<string | null>(null); // «lugar:clave» del «?» abierto
 
   const cambiarBloque = (n: number, c: Partial<BloqueForm>) => setBloques((bs) => bs.map((b, i) => (i === n ? { ...b, ...c } : b)));
   const cambiarOpcion = (n: number, k: number, c: Partial<OpcionForm>) =>
@@ -125,7 +154,7 @@ export function FormConjunto({ producto, conjunto, datos, onCerrar, onListo }: {
     setGuardando(true);
     try {
       const r = await op.guardarExtrasProducto(producto.id, datosBloques);
-      avisar(r.message ?? 'Extras guardados');
+      notificar(r.message || 'Modificadores actualizados');
       onListo(datosBloques);
     } catch (err) {
       avisar('No se pudo guardar', mensajeError(err));
@@ -166,6 +195,7 @@ export function FormConjunto({ producto, conjunto, datos, onCerrar, onListo }: {
               <View style={{ flex: 1 }}><Campo etiqueta="Mínimo" value={b.minimo} onChangeText={(t) => cambiarBloque(n, { minimo: t.replace(/[^0-9]/g, '').slice(0, 2) })} keyboardType="number-pad" placeholder="0" /></View>
               <View style={{ flex: 1 }}><Campo etiqueta="Máximo" value={b.maximo} onChangeText={(t) => cambiarBloque(n, { maximo: t.replace(/[^0-9]/g, '').slice(0, 2) })} keyboardType="number-pad" placeholder="Sin tope" /></View>
             </View>
+            <FilaAyuda claves={['requerido', 'minmax']} lugar={`b${n}`} abierta={ayuda} onAbrir={setAyuda} />
             <Text style={e.suave}>Al vender: «{b.nombre.trim() || 'Bloque'}» · {min > 0 ? 'Requerido' : 'Opcional'}{reglaTexto({ minimo: min, maximo: max }) ? ` · ${reglaTexto({ minimo: min, maximo: max })}` : ''}{max === 1 ? ' (tocar otra la cambia)' : ''}</Text>
 
             {b.opciones.map((o, k) => {
@@ -211,6 +241,7 @@ export function FormConjunto({ producto, conjunto, datos, onCerrar, onListo }: {
                   <Interruptor titulo="Obligatorio" detalle="Siempre va marcada y no se puede quitar" valor={o.obligatorio} onCambiar={(v) => cambiarOpcion(n, k, { obligatorio: v })} />
                   <Interruptor titulo="Una sola" detalle="Al elegirla se quitan todas las demás del bloque" valor={o.exclusiva} onCambiar={(v) => cambiarOpcion(n, k, { exclusiva: v })} />
                   <Interruptor titulo="Activa" detalle={o.activo ? 'Sale al vender' : 'Apagada: no sale al vender'} valor={o.activo} onCambiar={(v) => cambiarOpcion(n, k, { activo: v })} />
+                  <FilaAyuda claves={['precio', 'maximo', 'insumo', 'obligatorio', 'unaSola', 'activa']} lugar={`b${n}o${k}`} abierta={ayuda} onAbrir={setAyuda} />
                 </View>
               );
             })}
@@ -236,6 +267,9 @@ const e = StyleSheet.create({
   ayudaBotonTexto: { fontSize: 13, fontWeight: '600', color: C.suave },
   ayudaCaja: { gap: 8, backgroundColor: '#EFF6FF', borderRadius: 8, padding: 12 },
   ayudaTexto: { fontSize: 13, lineHeight: 19, color: '#1E3A8A' },
+  chipAyuda: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, borderWidth: 1, borderColor: '#D1D5DB', backgroundColor: '#fff' },
+  chipAyudaActivo: { backgroundColor: C.primario, borderColor: C.primario },
+  chipAyudaTexto: { fontSize: 12, fontWeight: '600', color: C.suave },
   contenido: { padding: 12, gap: 10, maxWidth: 1000, width: '100%', alignSelf: 'center' },
   cabecera: { flexDirection: 'row', gap: 12, alignItems: 'center' },
   vacio: { textAlign: 'center', color: C.suave, padding: 24 },

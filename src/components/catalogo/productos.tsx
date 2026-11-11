@@ -9,6 +9,7 @@ import { Boton, Campo, Etiqueta, Ventana } from '@/components/ui';
 import { C, radio } from '@/constants/colores';
 import { mensajeError } from '@/lib/api';
 import { avisar } from '@/lib/aviso';
+import { notificar } from '@/lib/notificacion';
 import { cantidad, dinero } from '@/lib/formato';
 import * as op from '@/lib/operaciones';
 import { useSesion } from '@/lib/sesion';
@@ -140,7 +141,7 @@ function FormProducto({ producto, onCerrar, onGuardado }: { producto: op.Product
 Ábrelo y agrégaselos de nuevo.`);
         }
       }
-      avisar(r.message);
+      notificar(r.message || (producto ? 'Producto actualizado' : 'Producto creado'));
       onGuardado();
     } catch (err) {
       avisar('No se pudo guardar', mensajeError(err));

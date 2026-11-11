@@ -5,6 +5,7 @@ import {
   Text, TextInput, TextInputProps, View, ViewStyle,
 } from 'react-native';
 
+import { Notificaciones } from '@/components/notificaciones';
 import { C, radio } from '@/constants/colores';
 
 type Variante = 'primario' | 'exito' | 'peligro' | 'neutro' | 'contorno';
@@ -69,6 +70,7 @@ export function Ventana({ visible, titulo, subtitulo, onCerrar, children, ancho 
           <ScrollView contentContainerStyle={{ gap: 12 }} keyboardShouldPersistTaps="handled">{children}</ScrollView>
           {pie && <View style={s.ventanaPie}>{pie}</View>}
         </View>
+        <Notificaciones />
       </KeyboardAvoidingView>
     </Modal>
   );

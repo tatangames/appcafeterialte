@@ -8,6 +8,7 @@ import { Boton } from '@/components/ui';
 import { C, radio } from '@/constants/colores';
 import { mensajeError } from '@/lib/api';
 import { avisar, confirmar } from '@/lib/aviso';
+import { notificar } from '@/lib/notificacion';
 import * as op from '@/lib/operaciones';
 
 /** Los bloques aún sin guardar (producto nuevo) con la forma de la vista. */
@@ -49,7 +50,7 @@ export function BloquesProducto({ productoId, nombre, pendientes = null, onPendi
     if (!(await confirmar(`¿Quitar los extras de «${nombre}»?`, 'Se venderá sin elegir nada.', 'Quitar'))) return;
     setQuitando(true);
     try {
-      avisar((await op.quitarExtrasProducto(productoId)).message);
+      notificar((await op.quitarExtrasProducto(productoId)).message);
       cargar();
     } catch (err) {
       avisar('No se pudo quitar', mensajeError(err));

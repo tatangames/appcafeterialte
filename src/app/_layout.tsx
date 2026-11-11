@@ -6,6 +6,7 @@ import { AppState } from 'react-native';
 
 import { AutorizacionGlobal } from '@/components/autorizacion';
 import { PantallaBloqueo } from '@/components/bloqueo';
+import { Notificaciones } from '@/components/notificaciones';
 import { C } from '@/constants/colores';
 import { alEscribir } from '@/lib/api';
 import { ConexionProvider } from '@/lib/conexion';
@@ -72,6 +73,7 @@ export default function RootLayout() {
         <ImpresionLocal />
         <AutorizacionGlobal />
         <PantallaBloqueo />
+        <Notificaciones />
       </ConexionProvider>
     </SesionProvider>
   );
