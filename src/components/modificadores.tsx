@@ -82,55 +82,76 @@ function Contenido({ producto, grupos, onCerrar, onAgregar, inicial }: Props & {
           deshabilitado={!!falta} variante="exito"
           onPress={() => onAgregar({ producto_id: producto.id, cantidad, modificadores: elegidos, notas: notas.trim() || undefined })} />
       }>
-      {suyos.map((g) => (
-        <View key={g.id} style={{ gap: 8 }}>
-          <Text style={e.grupo}>{g.nombre}{reglaTexto(g)
-            ? <Text style={[e.suave, total(g) < minimoDe(g) && { color: C.peligro }]}>  {reglaTexto(g)}{maximoDe(g) !== null ? ` · llevas ${total(g)}` : ''}</Text>
-            : null}</Text>
-          <View style={e.opciones}>
-            {g.opciones.map((o) => {
-              const activo = elegidos.includes(o.id);
-              // Sin existencia de su insumo no se elige (si ya venía elegida, se puede quitar)
-              const agotada = !!o.agotado && !activo;
-              const maximo = Math.max(1, o.maximo ?? 1);
-              if (maximo > 1 && !agotada) {
+      {/* Cada bloque como lista, una opción por renglón (como en las apps de delivery) */}
+      {suyos.map((g, nb) => {
+        const requerido = minimoDe(g) > 0;
+        const faltaAqui = total(g) < minimoDe(g);
+        const unaNomas = maximoDe(g) === 1;
+        return (
+          <View key={g.id} style={[{ gap: 6 }, nb > 0 && e.separado]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <Text style={e.grupo}>{g.nombre}</Text>
+              <Text style={[e.etiqueta, requerido ? (faltaAqui ? e.etiquetaFalta : e.etiquetaListo) : e.etiquetaOpcional]}>
+                {requerido ? 'Requerido' : 'Opcional'}
+              </Text>
+            </View>
+            {(!!reglaTexto(g) || maximoDe(g) !== null) && (
+              <Text style={[e.suave, faltaAqui && { color: C.peligro }]}>
+                {reglaTexto(g).replace(/^./, (c) => c.toUpperCase())}{maximoDe(g) !== null ? ` · llevas ${total(g)}` : ''}
+              </Text>
+            )}
+            <View style={e.lista}>
+              {g.opciones.map((o, k) => {
+                const activo = elegidos.includes(o.id);
+                // Sin existencia de su insumo no se elige (si ya venía elegida, se puede quitar)
+                const agotada = !!o.agotado && !activo;
+                const maximo = Math.max(1, o.maximo ?? 1);
                 const n = veces(o.id);
-                return (
-                  <View key={o.id} style={[e.opcion, e.conCantidad, n > 0 && e.opcionActiva]}>
-                    <Pressable onPress={() => n === 0 && cambiarVeces(g, o, 1, maximo)} style={{ flexShrink: 1 }}
-                      disabled={n === 0 && lleno(g) && !o.exclusiva}>
-                      <Text style={[e.opcionTexto, n > 0 && { color: '#fff' }]}>{o.nombre}</Text>
-                      <Text style={[e.suave, n > 0 && { color: '#E0F2FE' }]}>{o.precio > 0 ? `+${dinero(o.precio)} c/u · ` : ''}hasta {maximo}{o.obligatorio ? ' · siempre va' : ''}</Text>
-                    </Pressable>
-                    <Pressable style={[e.pasoChico, n <= (o.obligatorio ? 1 : 0) && { opacity: 0.35 }]} disabled={n <= (o.obligatorio ? 1 : 0)} onPress={() => cambiarVeces(g, o, -1, maximo)}
-                      accessibilityLabel={`Quitar ${o.nombre}`}><Text style={e.pasoTexto}>−</Text></Pressable>
-                    <Text style={[e.numeroChico, n > 0 && { color: '#fff' }]}>{n}</Text>
-                    <Pressable style={[e.pasoChico, (n >= maximo || (lleno(g) && !o.exclusiva)) && { opacity: 0.35 }]} disabled={n >= maximo || (lleno(g) && !o.exclusiva)} onPress={() => cambiarVeces(g, o, 1, maximo)}
-                      accessibilityLabel={`Agregar ${o.nombre}`}><Text style={e.pasoTexto}>+</Text></Pressable>
+                // Bloque lleno (máximo 2 ya elegidos): hay que quitar otra antes; con máximo 1 se cambia sola
+                const bloqueada = !activo && lleno(g) && !unaNomas && !o.exclusiva;
+                const detalle = agotada ? null
+                  : [o.precio > 0 ? `+${dinero(o.precio)}${maximo > 1 ? ' c/u' : ''}` : '', o.obligatorio ? 'siempre va' : ''].filter(Boolean).join(' · ');
+                const textos = (marcado: boolean) => (
+                  <View style={{ flex: 1 }}>
+                    <Text style={[e.opcionTexto, marcado && { color: C.primario }, agotada && { color: C.suave, textDecorationLine: 'line-through' }]}>{o.nombre}</Text>
+                    {agotada ? <Text style={e.agotado}>Agotado</Text> : detalle ? <Text style={e.suave}>{detalle}</Text> : null}
                   </View>
                 );
-              }
-              // Grupo lleno (máximo 2 ya elegidos): hay que quitar otra antes; con máximo 1 se cambia sola
-              const bloqueada = !activo && lleno(g) && maximoDe(g) !== 1 && !o.exclusiva;
-              return (
-                <Pressable key={o.id} onPress={() => !agotada && tocar(g, o)} disabled={agotada || bloqueada}
-                  style={[e.opcion, activo && e.opcionActiva, agotada && e.opcionAgotada, bloqueada && { opacity: 0.45 }]}>
-                  <Text style={[e.opcionTexto, activo && { color: '#fff' }, agotada && { color: C.suave, textDecorationLine: 'line-through' }]}>{o.nombre}</Text>
-                  {agotada ? <Text style={e.agotado}>Agotado</Text>
-                    : (o.precio > 0 || o.obligatorio) && <Text style={[e.suave, activo && { color: '#E0F2FE' }]}>
-                      {[o.precio > 0 ? `+${dinero(o.precio)}` : '', o.obligatorio ? 'siempre va' : ''].filter(Boolean).join(' · ')}</Text>}
-                </Pressable>
-              );
-            })}
+                if (maximo > 1 && !agotada) {
+                  const menos = n <= (o.obligatorio ? 1 : 0);
+                  const mas = n >= maximo || (lleno(g) && !o.exclusiva);
+                  return (
+                    <View key={o.id} style={[e.renglon, k > 0 && e.renglonLinea, n > 0 && e.renglonActivo]}>
+                      {textos(n > 0)}
+                      <Pressable style={[e.paso, menos && e.pasoApagado]} disabled={menos} onPress={() => cambiarVeces(g, o, -1, maximo)}
+                        accessibilityLabel={`Quitar ${o.nombre}`}><Text style={e.pasoTexto}>−</Text></Pressable>
+                      <Text style={e.numero}>{n}</Text>
+                      <Pressable style={[e.paso, mas && e.pasoApagado]} disabled={mas} onPress={() => cambiarVeces(g, o, 1, maximo)}
+                        accessibilityLabel={`Agregar ${o.nombre}`}><Text style={e.pasoTexto}>+</Text></Pressable>
+                    </View>
+                  );
+                }
+                return (
+                  <Pressable key={o.id} onPress={() => !agotada && tocar(g, o)} disabled={agotada || bloqueada}
+                    style={[e.renglon, k > 0 && e.renglonLinea, activo && e.renglonActivo, (agotada || bloqueada) && { opacity: 0.45 }]}>
+                    {textos(activo)}
+                    {/* Redondo si se elige una sola; cuadrado si se pueden varias */}
+                    <View style={[e.marca, unaNomas && { borderRadius: 13 }, activo && e.marcaActiva]}>
+                      {activo && (unaNomas ? <View style={e.punto} /> : <Text style={e.palomita}>✓</Text>)}
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
-        </View>
-      ))}
+        );
+      })}
 
       <View style={e.cantidad}>
         <Text style={e.grupo}>Cantidad</Text>
-        <Pressable style={e.paso} onPress={() => setCantidad((c) => Math.max(1, c - 1))}><Text style={e.pasoTexto}>−</Text></Pressable>
-        <Text style={e.numero}>{cantidad}</Text>
-        <Pressable style={e.paso} onPress={() => setCantidad((c) => c + 1)}><Text style={e.pasoTexto}>+</Text></Pressable>
+        <Pressable style={e.pasoGrande} onPress={() => setCantidad((c) => Math.max(1, c - 1))}><Text style={e.pasoGrandeTexto}>−</Text></Pressable>
+        <Text style={e.numeroGrande}>{cantidad}</Text>
+        <Pressable style={e.pasoGrande} onPress={() => setCantidad((c) => c + 1)}><Text style={e.pasoGrandeTexto}>+</Text></Pressable>
       </View>
 
       <Campo etiqueta="Nota para cocina" value={notas} onChangeText={setNotas} placeholder="Sin cebolla, bien tostado..." maxLength={200} />
@@ -139,19 +160,29 @@ function Contenido({ producto, grupos, onCerrar, onAgregar, inicial }: Props & {
 }
 
 const e = StyleSheet.create({
-  grupo: { fontSize: 15, fontWeight: '700', color: C.texto },
+  grupo: { fontSize: 16, fontWeight: '700', color: C.texto },
   suave: { fontSize: 12, color: C.suave, fontWeight: '400' },
-  opciones: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  opcion: { minHeight: 48, paddingHorizontal: 14, justifyContent: 'center', borderRadius: radio, borderWidth: 1, borderColor: '#D1D5DB', backgroundColor: '#fff' },
-  opcionActiva: { backgroundColor: C.libre, borderColor: C.libre },
+  separado: { borderTopWidth: 1, borderTopColor: '#F3F4F6', paddingTop: 12 },
+  etiqueta: { fontSize: 12, fontWeight: '700', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, overflow: 'hidden' },
+  etiquetaFalta: { backgroundColor: '#FEE2E2', color: '#991B1B' },
+  etiquetaListo: { backgroundColor: '#DCFCE7', color: '#166534' },
+  etiquetaOpcional: { backgroundColor: '#F3F4F6', color: '#374151' },
+  lista: { borderWidth: 1, borderColor: '#E5E7EB', borderRadius: radio, overflow: 'hidden', backgroundColor: '#fff' },
+  renglon: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 56, paddingHorizontal: 14, paddingVertical: 8, backgroundColor: '#fff' },
+  renglonLinea: { borderTopWidth: 1, borderTopColor: '#F3F4F6' },
+  renglonActivo: { backgroundColor: '#EFF6FF' },
   opcionTexto: { fontSize: 15, fontWeight: '600', color: C.texto },
-  opcionAgotada: { backgroundColor: '#F3F4F6', borderStyle: 'dashed' },
   agotado: { fontSize: 12, fontWeight: '700', color: C.peligro },
+  marca: { width: 26, height: 26, borderRadius: 6, borderWidth: 2, borderColor: '#D1D5DB', alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
+  marcaActiva: { borderColor: C.primario, backgroundColor: C.primario },
+  punto: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#fff' },
+  palomita: { color: '#fff', fontSize: 15, fontWeight: '800', lineHeight: 18 },
+  paso: { width: 40, height: 40, borderRadius: 20, backgroundColor: C.primario, alignItems: 'center', justifyContent: 'center' },
+  pasoApagado: { backgroundColor: '#E5E7EB' },
+  pasoTexto: { fontSize: 22, fontWeight: '700', color: '#fff', lineHeight: 26 },
+  numero: { fontSize: 18, fontWeight: '700', minWidth: 26, textAlign: 'center', color: C.texto },
   cantidad: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  paso: { width: 52, height: 52, borderRadius: radio, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' },
-  pasoTexto: { fontSize: 26, fontWeight: '600', color: C.texto },
-  numero: { fontSize: 22, fontWeight: '700', minWidth: 36, textAlign: 'center', color: C.texto },
-  conCantidad: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6 },
-  pasoChico: { width: 40, height: 40, borderRadius: radio, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' },
-  numeroChico: { fontSize: 18, fontWeight: '700', minWidth: 22, textAlign: 'center', color: C.texto },
+  pasoGrande: { width: 52, height: 52, borderRadius: radio, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' },
+  pasoGrandeTexto: { fontSize: 26, fontWeight: '600', color: C.texto },
+  numeroGrande: { fontSize: 22, fontWeight: '700', minWidth: 36, textAlign: 'center', color: C.texto },
 });
