@@ -101,7 +101,10 @@ const AYUDA: { titulo: string; lineas: string[] }[] = [
   { titulo: 'Ejemplo: grupo «Salsa» para el Waffle', lineas: ['Opcional, una sola opción. Nutella +$0.50, insumo Nutella 30 g · Caramelo +$0.50, insumo Caramelo 30 g · Sin salsa (en blanco), sin insumo.'] },
 ];
 
-function FormGrupo({ grupo, datos, onCerrar, onListo }: { grupo: op.GrupoExtra | null; datos: Datos; onCerrar: () => void; onListo: () => void }) {
+/** Crear o editar un bloque de extras. productosIniciales: uno nuevo creado desde un producto ya lo lleva. */
+export function FormGrupo({ grupo, datos, onCerrar, onListo, productosIniciales = [] }: {
+  grupo: op.GrupoExtra | null; datos: Datos; onCerrar: () => void; onListo: (id?: number) => void; productosIniciales?: number[];
+}) {
   const [nombre, setNombre] = useState(grupo?.nombre ?? '');
   // Unidades en total del grupo (en blanco: mínimo 0 = opcional, máximo sin tope)
   const [minimo, setMinimo] = useState(grupo && minimoDe(grupo) ? String(minimoDe(grupo)) : '');
@@ -114,7 +117,7 @@ function FormGrupo({ grupo, datos, onCerrar, onListo }: { grupo: op.GrupoExtra |
       obligatorio: !!o.obligatorio, exclusiva: !!o.exclusiva, activo: o.activo !== false,
       cantidad: o.cantidad ? String(o.cantidad) : '', unidad_medida_id: o.unidad_medida_id,
     })) ?? [opcionVacia()]);
-  const [productos, setProductos] = useState<number[]>(grupo?.productos.map((p) => p.id) ?? []);
+  const [productos, setProductos] = useState<number[]>(grupo?.productos.map((p) => p.id) ?? productosIniciales);
   const [eligiendoInsumo, setEligiendoInsumo] = useState<number | null>(null);
   const [buscarInsumo, setBuscarInsumo] = useState('');
   const [buscarProducto, setBuscarProducto] = useState('');
@@ -152,7 +155,7 @@ function FormGrupo({ grupo, datos, onCerrar, onListo }: { grupo: op.GrupoExtra |
         })),
       }, grupo?.id);
       avisar(r.message ?? 'Extras guardados');
-      onListo();
+      onListo(r.id ?? grupo?.id);
     } catch (err) {
       avisar('No se pudo guardar', mensajeError(err));
     } finally {
@@ -184,6 +187,12 @@ function FormGrupo({ grupo, datos, onCerrar, onListo }: { grupo: op.GrupoExtra |
         </View>
       )}
       <Campo etiqueta="Nombre del grupo" value={nombre} onChangeText={setNombre} placeholder="Leche, Endulzante, Saborizante..." maxLength={80} />
+      {grupo && grupo.productos.length > 1 && (
+        <Text style={[e.suave, { color: '#92400E' }]}>Este bloque lo usan {grupo.productos.length} productos: lo que cambies aquí cambia en todos.</Text>
+      )}
+      {/* Requerido / Opcional y cuántas en total, como en las apps de delivery */}
+      <Opciones opciones={[{ valor: 'opcional', texto: 'Opcional' }, { valor: 'requerido', texto: 'Requerido' }]} valor={min > 0 ? 'requerido' : 'opcional'}
+        onCambiar={(v) => setMinimo(v === 'requerido' ? String(Math.max(1, min)) : '')} />
       <View style={{ flexDirection: 'row', gap: 8 }}>
         <View style={{ flex: 1 }}><Campo etiqueta="Mínimo a elegir" value={minimo} onChangeText={(t) => setMinimo(t.replace(/[^0-9]/g, '').slice(0, 2))} keyboardType="number-pad" placeholder="0 (opcional)" /></View>
         <View style={{ flex: 1 }}><Campo etiqueta="Máximo a elegir" value={maximo} onChangeText={(t) => setMaximo(t.replace(/[^0-9]/g, '').slice(0, 2))} keyboardType="number-pad" placeholder="Sin tope" /></View>

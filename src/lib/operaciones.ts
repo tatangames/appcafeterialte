@@ -458,7 +458,12 @@ export const guardarGrupoExtras = (datos: {
   maximo: number | null; // null = sin tope
   opciones: { id?: number; nombre: string; precio: number; maximo?: number; obligatorio: boolean; exclusiva: boolean; activo: boolean; producto_id: number | null; cantidad: number | null; unidad_medida_id: number | null }[];
   productos: number[];
-}, id?: number) => id ? api.put<{ message: string }>(`/mesas/config/modificadores/${id}`, datos) : api.post<{ message: string }>('/mesas/config/modificadores', datos);
+}, id?: number) => id ? api.put<{ id: number; message: string }>(`/mesas/config/modificadores/${id}`, datos) : api.post<{ id: number; message: string }>('/mesas/config/modificadores', datos);
+
+// Bloques de un producto (grupos de extras) en el orden en que salen al vender
+export const getBloquesProducto = (productoId: number) => api.get<{ grupos: number[] }>(`/mesas/config/productos/${productoId}/modificadores`);
+export const guardarBloquesProducto = (productoId: number, grupos: number[]) =>
+  api.put<{ message: string }>(`/mesas/config/productos/${productoId}/modificadores`, { grupos });
 
 // Recetas
 export interface IngredienteRecetaCosto {

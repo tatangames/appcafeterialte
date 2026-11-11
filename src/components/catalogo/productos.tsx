@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { AyudaClases } from '@/components/catalogo/ayudaClases';
+import { BloquesProducto } from '@/components/catalogo/bloquesProducto';
 import { Interruptor, Opciones, Seccion } from '@/components/formulario';
 import { Boton, Campo, Etiqueta, Ventana } from '@/components/ui';
 import { C, radio } from '@/constants/colores';
@@ -222,6 +223,15 @@ function FormProducto({ producto, onCerrar, onGuardado }: { producto: op.Product
       <Campo etiqueta="Código de barras (opcional)" value={d.codigo_barras} onChangeText={(t) => cambiar({ codigo_barras: t })} maxLength={50} />
       <Campo etiqueta="Descripción (opcional)" value={d.descripcion} onChangeText={(t) => cambiar({ descripcion: t })} />
       {producto && <Interruptor titulo="Activo" detalle="Si lo apagas deja de aparecer en ventas y compras" valor={d.activo} onCambiar={(v) => cambiar({ activo: v })} />}
+
+      {/* Bloques de extras (Tipo de leche, Salsa...) como en las apps de delivery; un producto nuevo se guarda primero */}
+      {(d.se_vende || d.consumo_interno) && puede('mesas.configurar') && (
+        <>
+          <Seccion titulo="Extras (modificadores)" />
+          {producto ? <BloquesProducto productoId={producto.id} />
+            : <Text style={e.suave}>Guarda el producto primero; después, al editarlo, aquí le agregas sus extras.</Text>}
+        </>
+      )}
     </Ventana>
   );
 }

@@ -40,7 +40,9 @@ function Contenido({ producto, grupos, onCerrar, onAgregar, inicial }: Props & {
   const [cantidad, setCantidad] = useState(inicial?.cantidad ?? 1);
   const [notas, setNotas] = useState(inicial?.notas ?? '');
 
-  const suyos = useMemo(() => grupos.filter((g) => producto.grupos.includes(g.id)), [grupos, producto]);
+  // En el orden en que se acomodaron en el producto (Tipo de leche antes que Leche extra)
+  const suyos = useMemo(() => grupos.filter((g) => producto.grupos.includes(g.id))
+    .sort((a, b) => producto.grupos.indexOf(a.id) - producto.grupos.indexOf(b.id)), [grupos, producto]);
   // Un id repetido es la opción pedida varias veces (Huevo extra ×2): cobra cada una
   const veces = (id: number) => elegidos.filter((x) => x === id).length;
   const extra = suyos.flatMap((g) => g.opciones).reduce((t, o) => t + o.precio * veces(o.id), 0);
