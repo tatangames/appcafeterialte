@@ -2,7 +2,7 @@
   "expo": {
     "name": "Panadería Eduardo · Meseros",
     "slug": "appcafeteria",
-    "version": "1.0.13",
+    "version": "1.0.15",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "appcafeteria",
@@ -16,8 +16,8 @@
         "foregroundImage": "./assets/images/android-icon-foreground.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.panaderiaeduardo.meseros",
-      "versionCode": 13
+      "package": "com.tatanstudios.panaderiacontrol",
+      "versionCode": 15
     },
     "web": {
       "output": "server",
@@ -38,6 +38,27 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0,
+      "requestHeaders": {
+        "expo-channel-name": "preview"
+      },
+      "url": "https://u.expo.dev/50eae372-d17d-4296-a270-51cb362b0ba0"
+    },
+    "extra": {
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      },
+      "eas": {
+        "projectId": "50eae372-d17d-4296-a270-51cb362b0ba0"
+      }
     }
   }
 }
