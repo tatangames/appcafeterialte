@@ -198,7 +198,9 @@ function FormAbono({ cliente, onCerrar, onListo }: { cliente: op.Cliente; onCerr
         ))}
       </View>
       {metodo?.requiere_referencia && <Campo etiqueta={`Referencia de ${metodo.nombre}`} value={referencia} onChangeText={setReferencia} maxLength={100} />}
-      <Text style={e.suave}>Entra a la caja del turno abierto.</Text>
+      <Text style={e.suave}>{metodo?.afecta_efectivo
+        ? 'Entra a la gaveta: se suma al efectivo que debe haber al cerrar el turno.'
+        : 'Queda registrado en el turno abierto, pero no entra a la gaveta: el dinero llega al banco o a la cuenta del negocio.'}</Text>
     </Ventana>
   );
 }

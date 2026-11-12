@@ -528,10 +528,10 @@ export default function VentaRapida() {
             </Text>
           </View>
           {!encargo && (
-            <>
-              <Pressable onPress={() => setEligiendoCliente(true)} hitSlop={6}><Text style={e.descuento}>Cambiar</Text></Pressable>
-              <Pressable onPress={() => setCliente(null)} hitSlop={6}><Text style={[e.descuento, { color: C.peligro }]}>Quitar</Text></Pressable>
-            </>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 20 }}>
+              <Pressable onPress={() => setEligiendoCliente(true)} hitSlop={8}><Text style={e.descuento}>Cambiar</Text></Pressable>
+              <Pressable onPress={() => setCliente(null)} hitSlop={8}><Text style={[e.descuento, { color: C.peligro }]}>Quitar</Text></Pressable>
+            </View>
           )}
         </View>
       ) : !encargo && (
