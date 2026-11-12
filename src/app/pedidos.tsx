@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AyudaPedidos } from '@/components/ayudaPedidos';
 import { BuscarCliente } from '@/components/clientes';
 import { Encabezado } from '@/components/encabezado';
 import { SelectorFechaFutura, SelectorHora } from '@/components/filtroFechas';
@@ -23,6 +24,7 @@ const ESTADOS: [Estado, string][] = [['abierto', 'Pendientes'], ['cobrado', 'Ent
 // Encargos (pasteles, pedidos grandes): fecha de entrega, anticipo y lo que falta cobrar al entregar
 export default function PedidosEspeciales() {
   const [estado, setEstado] = useState<Estado>('abierto');
+  const [verAyuda, setVerAyuda] = useState(false);
   const [buscar, setBuscar] = useState('');
   const [lista, setLista] = useState<op.PedidoEspecial[] | null>(null);
   const [error, setError] = useState('');
@@ -56,9 +58,13 @@ export default function PedidosEspeciales() {
               <Text style={[e.chipTexto, estado === v && { color: '#fff' }]}>{t}</Text>
             </Pressable>
           ))}
+          <Pressable onPress={() => setVerAyuda((v) => !v)} accessibilityLabel="¿Cómo funcionan los pedidos especiales?" style={[e.chip, verAyuda && e.chipActivo]}>
+            <Text style={[e.chipTexto, verAyuda && { color: '#fff' }]}>? ¿Cómo funciona?</Text>
+          </Pressable>
         </View>
         <TextInput style={[e.buscar, { flex: 1, minWidth: 220 }]} value={buscar} onChangeText={setBuscar} placeholder="Número, nombre o teléfono" placeholderTextColor={C.tenue} />
       </View>
+      {verAyuda && <AyudaPedidos />}
       {error ? <Text style={e.error}>{error}</Text> : null}
       <FlatList
         data={lista ?? []}

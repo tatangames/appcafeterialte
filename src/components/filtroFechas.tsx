@@ -1,7 +1,8 @@
 // Filtro de fechas de las listas (compras, gastos, ventas, cierres, kárdex): atajos
 // (Hoy, 7 días, Este mes…) y «Elegir fechas» con un calendario para un rango libre.
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Boton, Ventana } from '@/components/ui';
 import { C, radio } from '@/constants/colores';
@@ -115,34 +116,52 @@ export function SelectorFechaFutura({ valor, onCambio }: { valor: string; onCamb
   );
 }
 
-const HORAS = Array.from({ length: 16 }, (_, i) => i + 6); // 6 a. m. a 9 p. m.
-const MINUTOS = ['00', '15', '30', '45'];
 /** «3:30 p. m.» a partir de «15:30» */
 export const hora12 = (h: string) => {
   const [hh, mm] = h.split(':').map(Number);
   return `${hh % 12 || 12}:${String(mm).padStart(2, '0')} ${hh < 12 ? 'a. m.' : 'p. m.'}`;
 };
 
-/** Hora (HH:MM, 24 h): se toca la hora y luego los minutos */
+const RAPIDAS = ['09:00', '12:00', '15:00', '17:00'];
+
+/**
+ * Hora (HH:MM, 24 h): botón que abre el reloj de Android para elegir hora y minutos,
+ * más unas horas comunes de un toque. En la web (pruebas) se escribe.
+ */
 export function SelectorHora({ valor, onCambio }: { valor: string; onCambio: (h: string) => void }) {
-  const [hh, mm] = valor.split(':');
-  const hora = Number(hh);
+  const abrirReloj = () => {
+    const [hh, mm] = valor.split(':').map(Number);
+    const inicial = new Date();
+    inicial.setHours(hh || 10, mm || 0, 0, 0);
+    DateTimePickerAndroid.open({
+      value: inicial, mode: 'time', is24Hour: false, title: 'Hora de entrega',
+      onChange: (evento, elegida) => {
+        if (evento.type !== 'set' || !elegida) return;
+        onCambio(`${String(elegida.getHours()).padStart(2, '0')}:${String(elegida.getMinutes()).padStart(2, '0')}`);
+      },
+    });
+  };
+
+  if (Platform.OS !== 'android') {
+    return (
+      <TextInput style={e.horaTexto} value={valor} onChangeText={onCambio} placeholder="15:30" maxLength={5} />
+    );
+  }
   return (
     <View style={{ gap: 8 }}>
+      <Pressable onPress={abrirReloj} style={({ pressed }) => [e.reloj, pressed && { opacity: 0.8 }]} accessibilityLabel="Elegir la hora de entrega">
+        <Text style={e.relojIcono}>🕒</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={e.relojHora}>{hora12(valor)}</Text>
+          <Text style={e.relojAyuda}>Toca para cambiar la hora</Text>
+        </View>
+      </Pressable>
       <View style={e.envuelta}>
-        {HORAS.map((h) => (
-          <Pressable key={h} onPress={() => onCambio(`${String(h).padStart(2, '0')}:${mm ?? '00'}`)} style={[e.chipHora, hora === h && e.chipActivo]}>
-            <Text style={[e.chipTexto, hora === h && { color: '#fff' }]}>{h % 12 || 12} {h < 12 ? 'am' : 'pm'}</Text>
+        {RAPIDAS.map((h) => (
+          <Pressable key={h} onPress={() => onCambio(h)} style={[e.chipHora, valor === h && e.chipActivo]}>
+            <Text style={[e.chipTexto, valor === h && { color: '#fff' }]}>{hora12(h)}</Text>
           </Pressable>
         ))}
-      </View>
-      <View style={[e.envuelta, { alignItems: 'center' }]}>
-        {MINUTOS.map((m) => (
-          <Pressable key={m} onPress={() => onCambio(`${hh}:${m}`)} style={[e.chipHora, mm === m && e.chipActivo]}>
-            <Text style={[e.chipTexto, mm === m && { color: '#fff' }]}>:{m}</Text>
-          </Pressable>
-        ))}
-        <Text style={[e.chipTexto, { marginLeft: 8 }]}>Entrega a las {hora12(valor)}</Text>
       </View>
     </View>
   );
@@ -230,6 +249,11 @@ export function VerMas({ hayMas, cargando, onPress }: { hayMas: boolean; cargand
 
 const e = StyleSheet.create({
   envuelta: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  reloj: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 64, paddingHorizontal: 16, borderRadius: radio, borderWidth: 1, borderColor: '#D1D5DB', backgroundColor: '#fff' },
+  relojIcono: { fontSize: 26 },
+  relojHora: { fontSize: 22, fontWeight: '800', color: C.texto },
+  relojAyuda: { fontSize: 12, color: C.suave },
+  horaTexto: { height: 48, borderWidth: 1, borderColor: '#D1D5DB', borderRadius: radio, paddingHorizontal: 14, fontSize: 16, color: C.texto, maxWidth: 160 },
   chipHora: { minWidth: 58, minHeight: 44, paddingHorizontal: 10, borderRadius: 999, borderWidth: 1, borderColor: '#D1D5DB', alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
   fila: { flexDirection: 'row', gap: 8, paddingHorizontal: 12, paddingVertical: 10 },
   chip: { paddingHorizontal: 16, height: 42, justifyContent: 'center', borderRadius: 999, backgroundColor: '#fff', borderWidth: 1, borderColor: C.borde },
