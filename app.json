@@ -2,7 +2,7 @@
   "expo": {
     "name": "Panadería Eduardo · Meseros",
     "slug": "appcafeteria",
-    "version": "1.0.15",
+    "version": "1.0.17",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "appcafeteria",
@@ -12,12 +12,12 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#FEF3C7",
+        "backgroundColor": "#6F491A",
         "foregroundImage": "./assets/images/android-icon-foreground.png"
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.tatanstudios.panaderiacontrol",
-      "versionCode": 15
+      "versionCode": 17
     },
     "web": {
       "output": "server",
@@ -28,9 +28,9 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#FEF3C7",
-          "image": "./assets/images/logo-negocio.png",
-          "imageWidth": 200
+          "backgroundColor": "#6F491A",
+          "image": "./assets/images/splash-logo.png",
+          "imageWidth": 288
         }
       ],
       "expo-secure-store",

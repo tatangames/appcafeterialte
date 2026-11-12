@@ -157,13 +157,9 @@ export default function Gastos() {
         pie={<Boton estilo={{ flex: 1 }} titulo={`Registrar ${monto ? dinero(Number(monto)) : ''}`} variante="exito" cargando={guardando}
           deshabilitado={!categoriaId || !(Number(monto) > 0) || descripcion.trim().length < 3 || faltaReferencia} onPress={guardar} />}>
         <Text style={e.etiqueta}>Categoría</Text>
-        <View style={e.opciones}>
-          {categorias.map((c) => (
-            <Pressable key={c.id} onPress={() => setCategoriaId(c.id)} style={[e.opcion, categoriaId === c.id && e.opcionActiva]}>
-              <Text style={[e.opcionTexto, categoriaId === c.id && { color: '#fff' }]}>{c.nombre}</Text>
-            </Pressable>
-          ))}
-        </View>
+        {/* Con muchas categorías sale un buscador («luz», «gas»); con pocas, todas como botones */}
+        <OpcionesBuscables opciones={categorias.map((c) => ({ valor: c.id, texto: c.nombre }))} valor={categoriaId}
+          onCambiar={setCategoriaId} placeholder="Buscar categoría (luz, gas, planilla...)" />
         <Campo etiqueta="Descripción" value={descripcion} onChangeText={setDescripcion} placeholder="Recibo de luz de octubre..." />
         <Campo etiqueta="Monto ($)" value={monto} onChangeText={setMonto} keyboardType="decimal-pad" placeholder="0.00" />
         <Text style={e.etiqueta}>Fecha</Text>
