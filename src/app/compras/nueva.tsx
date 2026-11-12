@@ -4,19 +4,25 @@ import { FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } fr
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Encabezado } from '@/components/encabezado';
+import { SelectorFecha } from '@/components/filtroFechas';
 import { OpcionesBuscables } from '@/components/formulario';
 import { ProveedorForm } from '@/components/proveedorForm';
 import { Boton, Campo, Cargando, Ventana } from '@/components/ui';
 import { C, radio } from '@/constants/colores';
 import { mensajeError } from '@/lib/api';
 import { avisar } from '@/lib/aviso';
-import { dinero, hoy, nuevoUuid } from '@/lib/formato';
+import { cantidad as formatoCantidad, dinero, hoy, nuevoUuid } from '@/lib/formato';
 import * as op from '@/lib/operaciones';
 import { useSesion } from '@/lib/sesion';
 import { sinTildes } from '@/lib/texto';
 
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const fechaLarga = (f: string) => `${Number(f.slice(8, 10))} ${MESES[Number(f.slice(5, 7)) - 1]} ${f.slice(0, 4)}`;
+// La fecha (AAAA-MM-DD) más unos días: el vencimiento se cuenta desde la fecha de la compra
+const masDias = (f: string, dias: number) => {
+  const d = new Date(Number(f.slice(0, 4)), Number(f.slice(5, 7)) - 1, Number(f.slice(8, 10)) + dias);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 
 interface Linea { clave: string; producto: op.ProductoCompra; unidadId: number | null; cantidad: string; costo: string }
 
@@ -40,6 +46,7 @@ export default function NuevaCompra() {
   const [proveedores, setProveedores] = useState<op.Proveedor[] | null>(null);
   const [catalogo, setCatalogo] = useState<Awaited<ReturnType<typeof op.getCatalogoCompras>> | null>(null);
   const [proveedorId, setProveedorId] = useState<number | null>(null);
+  const [fechaCompra, setFechaCompra] = useState(hoy());
   const [documento, setDocumento] = useState<(typeof DOCUMENTOS)[number][0]>('ticket');
   const [numero, setNumero] = useState('');
   const [condicion, setCondicion] = useState<'contado' | 'credito'>('contado');
@@ -107,9 +114,9 @@ export default function NuevaCompra() {
     setGuardando(true);
     try {
       const res = await op.registrarCompra({
-        uuid: uuid.current, proveedor_id: proveedorId, fecha: hoy(), tipo_documento: documento,
+        uuid: uuid.current, proveedor_id: proveedorId, fecha: fechaCompra, tipo_documento: documento,
         numero_documento: numero.trim() || undefined, condicion,
-        fecha_vencimiento: condicion === 'credito' ? hoy(diasNum) : undefined,
+        fecha_vencimiento: condicion === 'credito' ? masDias(fechaCompra, diasNum) : undefined,
         items: lineas.map((l) => ({ producto_id: l.producto.id, unidad_medida_id: l.unidadId, cantidad: Number(l.cantidad), costo_unitario: Number(l.costo || 0) })),
         pago: condicion === 'contado' ? { origen, caja_id: origen === 'caja' ? cajaId ?? undefined : undefined } : undefined,
       });
@@ -134,6 +141,8 @@ export default function NuevaCompra() {
           <Pressable onPress={() => { setBusqueda(''); setBuscando('proveedor'); }} style={e.selector}>
             <Text style={[e.selectorTexto, !proveedor && { color: C.tenue }]}>{proveedor?.nombre ?? 'Elegir proveedor'}</Text>
           </Pressable>
+          <Text style={e.etiqueta}>Fecha de la compra</Text>
+          <SelectorFecha valor={fechaCompra} onCambio={setFechaCompra} />
           <Text style={e.etiqueta}>Documento</Text>
           <Opciones valor={documento} opciones={DOCUMENTOS} onCambiar={setDocumento} />
           <Campo placeholder="Número del documento (opcional)" value={numero} onChangeText={setNumero} />
@@ -147,6 +156,14 @@ export default function NuevaCompra() {
           {lineas.map((l) => {
             const tipo = l.producto.unidad_tipo;
             const opcionesUnidad = unidades.filter((u) => !tipo || u.tipo === tipo);
+            // El costo es por la unidad elegida (por fardo): se muestra a cuánto sale cada unidad del inventario
+            const elegida = unidades.find((u) => u.id === l.unidadId);
+            const base = unidades.find((u) => u.id === l.producto.unidad_medida_id);
+            const cant = Number(l.cantidad || 0);
+            const sub = cant * Number(l.costo || 0);
+            const enBase = elegida && base ? cant * elegida.factor_base / base.factor_base : cant;
+            const abrevBase = base?.abreviatura ?? l.producto.unidad ?? '';
+            const convierte = !!elegida && !!base && elegida.id !== base.id;
             return (
               <View key={l.clave} style={e.linea}>
                 <View style={e.fila}>
@@ -158,9 +175,16 @@ export default function NuevaCompra() {
                   onCambiar={(id) => cambiar(l.clave, { unidadId: id, costo: costoSugerido(l.producto, id) })} placeholder="Buscar unidad (fardo, quintal, galón...)" />
                 <View style={e.fila}>
                   <View style={{ flex: 1 }}><Campo etiqueta="Cantidad" value={l.cantidad} onChangeText={(v) => cambiar(l.clave, { cantidad: v })} keyboardType="decimal-pad" placeholder="¿Cuánto llegó?" style={!(Number(l.cantidad) > 0) ? { borderColor: C.peligro } : undefined} /></View>
-                  <View style={{ flex: 1 }}><Campo etiqueta="Costo por unidad ($)" value={l.costo} onChangeText={(v) => cambiar(l.clave, { costo: v })} keyboardType="decimal-pad" /></View>
-                  <Text style={e.subtotal}>{dinero(Number(l.cantidad || 0) * Number(l.costo || 0))}</Text>
+                  <View style={{ flex: 1 }}><Campo etiqueta={`Costo por ${elegida?.nombre ?? 'unidad'} ($)`} value={l.costo} onChangeText={(v) => cambiar(l.clave, { costo: v })} keyboardType="decimal-pad" /></View>
+                  <Text style={e.subtotal}>{dinero(sub)}</Text>
                 </View>
+                {convierte && (
+                  <Text style={e.suave}>
+                    {cant > 0 ? `= ${formatoCantidad(enBase)} ${abrevBase}` : `1 ${elegida?.nombre} = ${formatoCantidad(elegida!.factor_base / base!.factor_base)} ${abrevBase}`}
+                    {sub > 0 && enBase > 0 ? ` · ${dinero(sub / enBase)} c/${abrevBase}` : ''}
+                    {' · el costo va por '}{elegida?.nombre}
+                  </Text>
+                )}
               </View>
             );
           })}
@@ -182,7 +206,7 @@ export default function NuevaCompra() {
                 </View>
               </View>
               <Text style={e.suave}>
-                {diasValidos ? `Vence el ${fechaLarga(hoy(diasNum))}` : 'Escribe los días de plazo'}
+                {diasValidos ? `Vence el ${fechaLarga(masDias(fechaCompra, diasNum))}` : 'Escribe los días de plazo'}
                 {proveedor ? ` · plazo del proveedor: ${proveedor.dias_credito ?? 0} días` : ''}
               </Text>
             </View>
