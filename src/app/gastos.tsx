@@ -1,19 +1,22 @@
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Encabezado } from '@/components/encabezado';
-import { FiltroFechas, rangoDe, textoRango, VerMas } from '@/components/filtroFechas';
+import { FiltroFechas, rangoDe, SelectorFecha, textoRango, VerMas } from '@/components/filtroFechas';
+import { OpcionesBuscables } from '@/components/formulario';
 import { VentanaMotivo } from '@/components/motivo';
 import { Boton, Campo, Etiqueta, Ventana } from '@/components/ui';
 import { C, radio } from '@/constants/colores';
 import { mensajeError } from '@/lib/api';
 import { avisar } from '@/lib/aviso';
-import { dinero, fecha, nuevoUuid } from '@/lib/formato';
+import { dinero, fecha, hoy, nuevoUuid } from '@/lib/formato';
 import * as op from '@/lib/operaciones';
 import { useListaPaginada } from '@/lib/paginado';
+import { getCatalogosCaja } from '@/lib/servicios';
 import { useSesion } from '@/lib/sesion';
+import type { MetodoPago } from '@/lib/tipos';
 
 // Gastos del periodo elegido (por defecto este mes) y registro de uno nuevo (desde la caja o fuera de caja)
 export default function Gastos() {
@@ -27,6 +30,13 @@ export default function Gastos() {
   const [monto, setMonto] = useState('');
   const [documento, setDocumento] = useState('');
   const [origen, setOrigen] = useState<'caja' | 'externo'>('caja');
+  const [fechaGasto, setFechaGasto] = useState(hoy());
+  const [metodos, setMetodos] = useState<MetodoPago[]>([]);
+  const [metodoId, setMetodoId] = useState<number | null>(null);
+  const [referencia, setReferencia] = useState('');
+  const [proveedores, setProveedores] = useState<op.Proveedor[]>([]);
+  const [proveedorId, setProveedorId] = useState<number>(0); // 0 = sin proveedor
+  const [detalle, setDetalle] = useState<op.Gasto | null>(null);
   const [guardando, setGuardando] = useState(false);
   // Administrar categorías: null = cerrado; lista o formulario de una categoría
   const [admin, setAdmin] = useState<null | { lista: op.CategoriaGasto[]; form: { id?: number; nombre: string; descripcion: string; activo: boolean } | null }>(null);
@@ -68,6 +78,25 @@ export default function Gastos() {
 
   useFocusEffect(useCallback(() => { cargar(); }, [cargar]));
 
+  // Al abrir el formulario: formas de pago (sin crédito; efectivo primero) y proveedores
+  const abrirNuevo = useCallback(() => {
+    setFechaGasto(hoy());
+    setReferencia('');
+    setProveedorId(0);
+    setAbierto(true);
+  }, []);
+  useEffect(() => {
+    if (!abierto) return;
+    getCatalogosCaja().then((c) => {
+      const lista = c.metodos_pago.filter((m) => m.tipo !== 'credito');
+      setMetodos(lista);
+      setMetodoId((id) => id ?? lista.find((m) => m.tipo === 'efectivo')?.id ?? lista[0]?.id ?? null);
+    }).catch(() => null);
+    op.getProveedores().then(setProveedores).catch(() => null);
+  }, [abierto]);
+  const metodo = metodos.find((m) => m.id === metodoId);
+  const faltaReferencia = !!metodo?.requiere_referencia && referencia.trim() === '';
+
   const guardar = async () => {
     if (!categoriaId) return avisar('Elige la categoría');
     setGuardando(true);
@@ -75,12 +104,16 @@ export default function Gastos() {
       await op.registrarGasto({
         uuid: uuid.current, categoria_id: categoriaId, descripcion: descripcion.trim(), monto: Number(monto), origen,
         caja_id: origen === 'caja' ? cajaId ?? undefined : undefined, numero_documento: documento.trim() || undefined,
+        fecha: fechaGasto, metodo_pago_id: metodoId ?? undefined, referencia: referencia.trim() || undefined,
+        proveedor_id: proveedorId || undefined,
       });
       uuid.current = nuevoUuid();
       setAbierto(false);
       setDescripcion('');
       setMonto('');
       setDocumento('');
+      setReferencia('');
+      setProveedorId(0);
       cargar();
     } catch (err) {
       avisar('No se pudo registrar el gasto', mensajeError(err));
@@ -95,7 +128,7 @@ export default function Gastos() {
         derecha={
           <View style={{ flexDirection: 'row', gap: 8 }}>
             {puede('gastos.categorias') && <Boton titulo="Categorías" variante="contorno" chico onPress={abrirCategorias} />}
-            {puede('gastos.registrar') && <Boton titulo="+ Nuevo gasto" chico onPress={() => setAbierto(true)} />}
+            {puede('gastos.registrar') && <Boton titulo="+ Nuevo gasto" chico onPress={abrirNuevo} />}
           </View>
         } />
       {puedeGastos && <FiltroFechas valor={rango} onCambio={setRango} />}
@@ -107,11 +140,10 @@ export default function Gastos() {
         contentContainerStyle={e.lista}
         ListEmptyComponent={<Text style={e.vacio}>{!puedeGastos ? 'Usa el botón Categorías para administrarlas' : datos ? 'Sin gastos en este periodo' : 'Cargando...'}</Text>}
         renderItem={({ item: g }) => (
-          <Pressable style={({ pressed }) => [e.gasto, pressed && { opacity: 0.8 }]} disabled={g.anulado || !puede('gastos.registrar')}
-            onPress={() => setAnulando(g)}>
+          <Pressable style={({ pressed }) => [e.gasto, pressed && { opacity: 0.8 }]} onPress={() => setDetalle(g)}>
             <View style={{ flex: 1, gap: 4 }}>
               <Text style={e.titulo}>{g.descripcion}</Text>
-              <Text style={e.suave}>{fecha(g.fecha)} · {g.categoria} · {g.origen === 'caja' ? 'de la caja' : 'fuera de caja'}{g.metodo ? ` · ${g.metodo}` : ''}</Text>
+              <Text style={e.suave}>{g.numero} · {fecha(g.fecha)} · {g.categoria} · {g.origen === 'caja' ? 'de la caja' : 'fuera de caja'}{g.metodo ? ` · ${g.metodo}` : ''}</Text>
             </View>
             <View style={{ alignItems: 'flex-end', gap: 4 }}>
               <Text style={[e.total, g.anulado && { textDecorationLine: 'line-through', color: C.tenue }]}>{dinero(g.monto)}</Text>
@@ -123,7 +155,7 @@ export default function Gastos() {
 
       <Ventana visible={abierto} titulo="Nuevo gasto" onCerrar={() => setAbierto(false)} ancho={560}
         pie={<Boton estilo={{ flex: 1 }} titulo={`Registrar ${monto ? dinero(Number(monto)) : ''}`} variante="exito" cargando={guardando}
-          deshabilitado={!categoriaId || !(Number(monto) > 0) || descripcion.trim().length < 3} onPress={guardar} />}>
+          deshabilitado={!categoriaId || !(Number(monto) > 0) || descripcion.trim().length < 3 || faltaReferencia} onPress={guardar} />}>
         <Text style={e.etiqueta}>Categoría</Text>
         <View style={e.opciones}>
           {categorias.map((c) => (
@@ -134,7 +166,8 @@ export default function Gastos() {
         </View>
         <Campo etiqueta="Descripción" value={descripcion} onChangeText={setDescripcion} placeholder="Recibo de luz de octubre..." />
         <Campo etiqueta="Monto ($)" value={monto} onChangeText={setMonto} keyboardType="decimal-pad" placeholder="0.00" />
-        <Campo etiqueta="Factura o recibo (opcional)" value={documento} onChangeText={setDocumento} />
+        <Text style={e.etiqueta}>Fecha</Text>
+        <SelectorFecha valor={fechaGasto} onCambio={setFechaGasto} />
         <Text style={e.etiqueta}>Se paga</Text>
         <View style={e.opciones}>
           {([['caja', 'Con dinero de la caja'], ['externo', 'Fuera de caja (banco, tarjeta)']] as const).map(([v, t]) => (
@@ -143,6 +176,59 @@ export default function Gastos() {
             </Pressable>
           ))}
         </View>
+        <Text style={e.suave}>{origen === 'caja' ? 'Sale de la gaveta del turno abierto y aparece en el cuadre como gasto.' : 'Pagado con banco, tarjeta del negocio u otra cuenta: no toca la caja.'}</Text>
+        {metodos.length > 0 && (
+          <>
+            <Text style={e.etiqueta}>Forma de pago</Text>
+            <View style={e.opciones}>
+              {metodos.map((m) => (
+                <Pressable key={m.id} onPress={() => setMetodoId(m.id)} style={[e.opcion, metodoId === m.id && e.opcionActiva]}>
+                  <Text style={[e.opcionTexto, metodoId === m.id && { color: '#fff' }]}>{m.nombre}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </>
+        )}
+        <Campo etiqueta={metodo?.requiere_referencia ? 'Referencia *' : 'Referencia (opcional)'} value={referencia} onChangeText={setReferencia} maxLength={100}
+          placeholder="N.º de transferencia o autorización" style={faltaReferencia ? { borderColor: C.peligro } : undefined} />
+        <Campo etiqueta="N.º de factura o recibo (opcional)" value={documento} onChangeText={setDocumento} maxLength={50} />
+        {proveedores.length > 0 && (
+          <>
+            <Text style={e.etiqueta}>Proveedor (opcional)</Text>
+            <OpcionesBuscables opciones={[{ valor: 0, texto: 'Sin proveedor' }, ...proveedores.map((p) => ({ valor: p.id, texto: p.nombre }))]}
+              valor={proveedorId} onCambiar={setProveedorId} placeholder="Buscar proveedor" />
+          </>
+        )}
+      </Ventana>
+
+      {/* Detalle del gasto: quién lo registró, cómo se pagó y, si se puede, anularlo */}
+      <Ventana visible={!!detalle} titulo={`Gasto ${detalle?.numero ?? ''}`} ancho={520} onCerrar={() => setDetalle(null)}
+        subtitulo={detalle ? `${fecha(detalle.fecha)}${detalle.usuario ? ` · ${detalle.usuario}` : ''}${detalle.registrado ? ` · ${detalle.registrado.slice(11)}` : ''}` : undefined}
+        pie={detalle && !detalle.anulado && puede('gastos.registrar')
+          ? <Boton estilo={{ flex: 1 }} titulo="Anular gasto" variante="contorno" onPress={() => { setAnulando(detalle); setDetalle(null); }} />
+          : undefined}>
+        {detalle && (
+          <View style={{ gap: 8 }}>
+            <Text style={[e.total, { fontSize: 28 }, detalle.anulado && { textDecorationLine: 'line-through', color: C.tenue }]}>{dinero(detalle.monto)}</Text>
+            {([
+              ['Categoría', detalle.categoria],
+              ['Descripción', detalle.descripcion],
+              ['Pago', `${detalle.metodo ?? '—'} · ${detalle.origen === 'caja' ? 'de la caja' : 'fuera de caja'}`],
+              ['Turno', detalle.turno],
+              ['Referencia', detalle.referencia],
+              ['Proveedor', detalle.proveedor],
+              ['Factura o recibo', detalle.numero_documento],
+            ] as const).filter(([, v]) => !!v).map(([t, v]) => (
+              <View key={t} style={e.dato}>
+                <Text style={e.suave}>{t}</Text>
+                <Text style={e.datoValor}>{v}</Text>
+              </View>
+            ))}
+            {detalle.anulado && (
+              <Text style={{ color: C.peligro, fontWeight: '600' }}>Anulado{detalle.anulado_por ? ` por ${detalle.anulado_por}` : ''}{detalle.motivo_anulacion ? `: ${detalle.motivo_anulacion}` : ''}</Text>
+            )}
+          </View>
+        )}
       </Ventana>
 
       <Ventana visible={!!admin} ancho={600} onCerrar={() => setAdmin(null)}
@@ -205,4 +291,6 @@ const e = StyleSheet.create({
   opcion: { minHeight: 46, paddingHorizontal: 14, borderRadius: radio, borderWidth: 1, borderColor: '#D1D5DB', justifyContent: 'center' },
   opcionActiva: { backgroundColor: C.primario, borderColor: C.primario },
   opcionTexto: { fontSize: 15, fontWeight: '600', color: C.texto },
+  dato: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
+  datoValor: { flex: 1, textAlign: 'right', fontSize: 14, color: C.texto, fontWeight: '600' },
 });

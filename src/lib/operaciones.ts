@@ -158,6 +158,8 @@ export const registrarCompra = (datos: {
 export interface Gasto {
   id: number; numero: string; fecha: string; categoria: string | null; descripcion: string; monto: number;
   origen: 'caja' | 'externo'; metodo: string | null; usuario?: string | null; anulado: boolean;
+  proveedor?: string | null; referencia?: string | null; numero_documento?: string | null; turno?: string | null;
+  registrado?: string; anulado_por?: string | null; motivo_anulacion?: string | null;
 }
 
 export interface CategoriaGasto { id: number; nombre: string; descripcion: string | null; activo: boolean; gastos: number }
@@ -175,6 +177,7 @@ export const getGastos = (filtros: { desde?: string; hasta?: string; page?: numb
 export const registrarGasto = (datos: {
   uuid: string; categoria_id: number; descripcion: string; monto: number; origen: 'caja' | 'externo';
   caja_id?: number; metodo_pago_id?: number; numero_documento?: string;
+  fecha?: string; referencia?: string; proveedor_id?: number;
 }) => api.post<{ message: string }>('/gastos', datos);
 
 // ── Inventario ────────────────────────────────────────────────
