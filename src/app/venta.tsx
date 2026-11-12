@@ -4,6 +4,7 @@ import { FlatList, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, 
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AvisosAgregado, useAvisosAgregado } from '@/components/avisosAgregado';
+import { BuscarCliente } from '@/components/clientes';
 import { CobroModal, Pago } from '@/components/cobro';
 import { Encabezado } from '@/components/encabezado';
 import { IngredientesModal } from '@/components/ingredientes';
@@ -92,8 +93,9 @@ export default function VentaRapida() {
   const [descuento, setDescuento] = useState<number | null>(null);
   const [pidiendoDescuento, setPidiendoDescuento] = useState(false);
   const [textoDescuento, setTextoDescuento] = useState('');
-  // Cliente del encargo que se entrega (ya no se asigna a mano) y el encargo (solo se cobra lo que falta del anticipo)
+  // Cliente de la venta (se elige con «Agregar cliente» o viene del encargo) y el encargo (solo se cobra lo que falta del anticipo)
   const [cliente, setCliente] = useState<op.Cliente | null>(null);
+  const [eligiendoCliente, setEligiendoCliente] = useState(false);
   const [encargo, setEncargo] = useState<op.PedidoEspecial | null>(null);
   const { pedido: pedidoParam } = useLocalSearchParams<{ pedido?: string }>();
 
@@ -515,14 +517,30 @@ export default function VentaRapida() {
           <Text style={e.suave}>Anticipo recibido {dinero(anticipo)} · se cobra lo que falta</Text>
         </View>
       )}
-      {!agregandoA && cliente && (
+      {/* Cliente de la venta: para venderle al crédito o el ticket a su nombre. El del encargo no se cambia */}
+      {!agregandoA && (cliente ? (
         <View style={e.linea}>
           <View style={{ flex: 1 }}>
-            <Text style={e.cliente} numberOfLines={1}>Cliente: {cliente.nombre}</Text>
-            {cliente.limite_credito > 0 && <Text style={e.suave}>Crédito disponible {dinero(cliente.credito_disponible)}</Text>}
+            <Text style={e.cliente} numberOfLines={1}>👤 {cliente.nombre}</Text>
+            <Text style={e.suave}>
+              {cliente.limite_credito > 0 ? `Crédito disponible ${dinero(cliente.credito_disponible)}` : 'Sin crédito'}
+              {cliente.saldo > 0 ? ` · debe ${dinero(cliente.saldo)}` : ''}
+            </Text>
           </View>
+          {!encargo && (
+            <>
+              <Pressable onPress={() => setEligiendoCliente(true)} hitSlop={6}><Text style={e.descuento}>Cambiar</Text></Pressable>
+              <Pressable onPress={() => setCliente(null)} hitSlop={6}><Text style={[e.descuento, { color: C.peligro }]}>Quitar</Text></Pressable>
+            </>
+          )}
         </View>
-      )}
+      ) : !encargo && (
+        <View style={e.linea}>
+          <Pressable onPress={() => setEligiendoCliente(true)} hitSlop={6} style={{ flex: 1 }}>
+            <Text style={e.descuento}>👤 Agregar cliente <Text style={e.suave}>· al crédito o ticket a su nombre</Text></Text>
+          </Pressable>
+        </View>
+      ))}
       <View style={e.linea}>
         <Pressable onPress={() => { setTextoDescuento(descuento ? String(descuento) : ''); setPidiendoDescuento(true); }}
           disabled={lineas.length === 0 || !!agregandoA} hitSlop={6}>
@@ -582,6 +600,8 @@ export default function VentaRapida() {
           const r = await imprimirVentaOffline(ultimaOffline);
           if (r.errores.length) avisar('No se imprimió', r.errores.join('\n'));
         } : undefined} />
+      <BuscarCliente visible={eligiendoCliente} titulo="Cliente de la venta" onCerrar={() => setEligiendoCliente(false)}
+        onElegir={(c) => { setCliente(c); setEligiendoCliente(false); }} />
       <CobroModal visible={abierto} titulo={`${encargo ? `Entregar ${encargo.numero}` : 'Cobrar venta'}${descuento ? ` (−${descuento}%)` : ''}${cliente ? ` · ${cliente.nombre}` : ''}`}
         total={aCobrar} metodos={metodos} cobrando={cobrando} credito={credito}
         onCerrar={() => setAbierto(false)} onCobrar={cobrar}
