@@ -4,6 +4,7 @@ import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-na
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AyudaClientes } from '@/components/ayudaClientes';
+import { AyudaCredito } from '@/components/ayudaCredito';
 import { ClienteForm } from '@/components/clientes';
 import { Encabezado } from '@/components/encabezado';
 import { VentanaMotivo } from '@/components/motivo';
@@ -25,6 +26,7 @@ export default function Clientes() {
   const [buscar, setBuscar] = useState('');
   const [conSaldo, setConSaldo] = useState(false);
   const [verAyuda, setVerAyuda] = useState(false);
+  const [verAyudaCredito, setVerAyudaCredito] = useState(false);
   const [lista, setLista] = useState<op.Cliente[] | null>(null);
   const [error, setError] = useState('');
   const [formulario, setFormulario] = useState<{ cliente: op.Cliente | null } | null>(null);
@@ -96,6 +98,11 @@ export default function Clientes() {
               {cobra && <Boton estilo={{ flex: 1 }} titulo="Recibir abono" variante="exito" deshabilitado={ficha.cliente.saldo <= 0} onPress={() => setAbonando(true)} />}
             </>
           }>
+          <Pressable onPress={() => setVerAyudaCredito((v) => !v)} accessibilityLabel="¿Cómo funciona el crédito?"
+            style={[e.chip, { alignSelf: 'flex-start' }, verAyudaCredito && e.chipActivo]}>
+            <Text style={[e.chipTexto, verAyudaCredito && { color: '#fff' }]}>? ¿Cómo funciona el crédito?</Text>
+          </Pressable>
+          {verAyudaCredito && <AyudaCredito />}
           <View style={e.resumen}>
             <View style={e.dato}><Text style={e.suave}>Debe</Text><Text style={e.grande}>{dinero(ficha.cliente.saldo)}</Text></View>
             <View style={e.dato}><Text style={e.suave}>Vencido</Text><Text style={[e.grande, ficha.resumen.vencido > 0 && { color: C.peligro }]}>{dinero(ficha.resumen.vencido)}</Text></View>
