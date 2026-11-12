@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BuscarCliente } from '@/components/clientes';
 import { Encabezado } from '@/components/encabezado';
+import { SelectorFechaFutura, SelectorHora } from '@/components/filtroFechas';
 import { Boton, Campo, Etiqueta, Ventana } from '@/components/ui';
 import { C, radio } from '@/constants/colores';
 import { mensajeError } from '@/lib/api';
@@ -245,17 +246,10 @@ function FormPedido({ onCerrar, onCreado }: { onCerrar: () => void; onCreado: ()
 
       <Text style={e.etiqueta}>Entrega</Text>
       <View style={e.chips}>
-        {[[hoy(), 'Hoy'], [hoy(1), 'Mañana'], [hoy(2), 'Pasado mañana']].map(([v, t]) => (
-          <Pressable key={v} onPress={() => setDia(v)} style={[e.chip, dia === v && e.chipActivo]}>
-            <Text style={[e.chipTexto, dia === v && { color: '#fff' }]}>{t}</Text>
-          </Pressable>
-        ))}
+        <SelectorFechaFutura valor={dia} onCambio={setDia} />
       </View>
-      <View style={{ flexDirection: 'row', gap: 10 }}>
-        <View style={{ flex: 1 }}><Campo etiqueta="Fecha (AAAA-MM-DD)" value={dia} onChangeText={setDia} maxLength={10} /></View>
-        <View style={{ flex: 1 }}><Campo etiqueta="Hora (24 h)" value={horaEntrega} onChangeText={setHoraEntrega} placeholder="15:30" maxLength={5} /></View>
-      </View>
-      {!fechaValida && <Text style={{ color: C.peligro }}>Escribe la fecha como 2026-11-20 y la hora como 15:30.</Text>}
+      <Text style={e.etiqueta}>Hora de entrega</Text>
+      <SelectorHora valor={horaEntrega} onCambio={setHoraEntrega} />
 
       <Text style={e.etiqueta}>Productos</Text>
       {lineas.map((l, i) => (

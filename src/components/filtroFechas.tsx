@@ -90,11 +90,70 @@ export function SelectorFecha({ valor, onCambio }: { valor: string; onCambio: (f
   );
 }
 
+/** Fecha de entrega (hoy o un día futuro): «Hoy», «Mañana», «Pasado mañana» o «📅 Otro día» con el calendario */
+export function SelectorFechaFutura({ valor, onCambio }: { valor: string; onCambio: (f: string) => void }) {
+  const [eligiendo, setEligiendo] = useState(false);
+  const rapidas = [['Hoy', hoy()], ['Mañana', hoy(1)], ['Pasado mañana', hoy(2)]] as const;
+  const otro = !rapidas.some(([, f]) => f === valor);
+  return (
+    <>
+      <View style={e.envuelta}>
+        {rapidas.map(([t, f]) => (
+          <Pressable key={t} onPress={() => onCambio(f)} style={[e.chip, valor === f && e.chipActivo]}>
+            <Text style={[e.chipTexto, valor === f && { color: '#fff' }]}>{t}</Text>
+          </Pressable>
+        ))}
+        <Pressable onPress={() => setEligiendo(true)} style={[e.chip, otro && e.chipActivo]}>
+          <Text style={[e.chipTexto, otro && { color: '#fff' }]}>📅 {otro ? fecha(valor) : 'Otro día'}</Text>
+        </Pressable>
+      </View>
+      {eligiendo && (
+        <Calendario inicial={{ clave: 'otro', desde: valor, hasta: valor }} unDia futuro onCerrar={() => setEligiendo(false)}
+          onAplicar={(d) => { setEligiendo(false); onCambio(d); }} />
+      )}
+    </>
+  );
+}
+
+const HORAS = Array.from({ length: 16 }, (_, i) => i + 6); // 6 a. m. a 9 p. m.
+const MINUTOS = ['00', '15', '30', '45'];
+/** «3:30 p. m.» a partir de «15:30» */
+export const hora12 = (h: string) => {
+  const [hh, mm] = h.split(':').map(Number);
+  return `${hh % 12 || 12}:${String(mm).padStart(2, '0')} ${hh < 12 ? 'a. m.' : 'p. m.'}`;
+};
+
+/** Hora (HH:MM, 24 h): se toca la hora y luego los minutos */
+export function SelectorHora({ valor, onCambio }: { valor: string; onCambio: (h: string) => void }) {
+  const [hh, mm] = valor.split(':');
+  const hora = Number(hh);
+  return (
+    <View style={{ gap: 8 }}>
+      <View style={e.envuelta}>
+        {HORAS.map((h) => (
+          <Pressable key={h} onPress={() => onCambio(`${String(h).padStart(2, '0')}:${mm ?? '00'}`)} style={[e.chipHora, hora === h && e.chipActivo]}>
+            <Text style={[e.chipTexto, hora === h && { color: '#fff' }]}>{h % 12 || 12} {h < 12 ? 'am' : 'pm'}</Text>
+          </Pressable>
+        ))}
+      </View>
+      <View style={[e.envuelta, { alignItems: 'center' }]}>
+        {MINUTOS.map((m) => (
+          <Pressable key={m} onPress={() => onCambio(`${hh}:${m}`)} style={[e.chipHora, mm === m && e.chipActivo]}>
+            <Text style={[e.chipTexto, mm === m && { color: '#fff' }]}>:{m}</Text>
+          </Pressable>
+        ))}
+        <Text style={[e.chipTexto, { marginLeft: 8 }]}>Entrega a las {hora12(valor)}</Text>
+      </View>
+    </View>
+  );
+}
+
 const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 const DIAS = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sá', 'Do'];
 
-// Primer toque: desde; segundo: hasta (si es anterior, se invierten). Las fechas futuras no se eligen.
-function Calendario({ inicial, onCerrar, onAplicar, unDia }: { inicial: Rango; onCerrar: () => void; onAplicar: (desde: string, hasta: string) => void; unDia?: boolean }) {
+// Primer toque: desde; segundo: hasta (si es anterior, se invierten). Las fechas futuras no se eligen
+// (con «futuro», al revés: solo hoy en adelante, para fechas de entrega).
+function Calendario({ inicial, onCerrar, onAplicar, unDia, futuro: haciaAdelante }: { inicial: Rango; onCerrar: () => void; onAplicar: (desde: string, hasta: string) => void; unDia?: boolean; futuro?: boolean }) {
   const [desde, setDesde] = useState<string | null>(inicial.desde);
   const [hasta, setHasta] = useState<string | null>(inicial.hasta);
   const [mes, setMes] = useState(() => {
@@ -117,7 +176,8 @@ function Calendario({ inicial, onCerrar, onAplicar, unDia }: { inicial: Rango; o
     ...Array.from({ length: diasMes }, (_, i) => aTexto(new Date(mes.getFullYear(), mes.getMonth(), i + 1))),
   ];
   const fin = hasta ?? desde;
-  const siguienteBloqueado = aTexto(new Date(mes.getFullYear(), mes.getMonth() + 1, 1)) > limite;
+  const siguienteBloqueado = !haciaAdelante && aTexto(new Date(mes.getFullYear(), mes.getMonth() + 1, 1)) > limite;
+  const anteriorBloqueado = !!haciaAdelante && aTexto(new Date(mes.getFullYear(), mes.getMonth(), 0)) < limite;
 
   return (
     <Ventana visible titulo={unDia ? 'Elegir fecha' : 'Elegir fechas'}
@@ -125,7 +185,8 @@ function Calendario({ inicial, onCerrar, onAplicar, unDia }: { inicial: Rango; o
       onCerrar={onCerrar} ancho={460}
       pie={<Boton estilo={{ flex: 1 }} titulo="Aplicar" deshabilitado={!desde} onPress={() => desde && onAplicar(desde, hasta ?? desde)} />}>
       <View style={e.cabeceraMes}>
-        <Pressable onPress={() => setMes(new Date(mes.getFullYear(), mes.getMonth() - 1, 1))} style={e.flecha} hitSlop={8}>
+        <Pressable onPress={() => setMes(new Date(mes.getFullYear(), mes.getMonth() - 1, 1))} style={[e.flecha, anteriorBloqueado && { opacity: 0.3 }]}
+          disabled={anteriorBloqueado} hitSlop={8}>
           <Text style={e.flechaTexto}>‹</Text>
         </Pressable>
         <Text style={e.mes}>{MESES[mes.getMonth()]} {mes.getFullYear()}</Text>
@@ -140,7 +201,7 @@ function Calendario({ inicial, onCerrar, onAplicar, unDia }: { inicial: Rango; o
       <View style={e.grilla}>
         {celdas.map((dia, i) => {
           if (!dia) return <View key={`h${i}`} style={e.celda} />;
-          const futuro = dia > limite;
+          const futuro = haciaAdelante ? dia < limite : dia > limite; // el día que no se puede elegir
           const extremo = dia === desde || dia === fin;
           const dentro = !!desde && !!fin && dia > desde && dia < fin;
           return (
@@ -168,6 +229,8 @@ export function VerMas({ hayMas, cargando, onPress }: { hayMas: boolean; cargand
 }
 
 const e = StyleSheet.create({
+  envuelta: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chipHora: { minWidth: 58, minHeight: 44, paddingHorizontal: 10, borderRadius: 999, borderWidth: 1, borderColor: '#D1D5DB', alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
   fila: { flexDirection: 'row', gap: 8, paddingHorizontal: 12, paddingVertical: 10 },
   chip: { paddingHorizontal: 16, height: 42, justifyContent: 'center', borderRadius: 999, backgroundColor: '#fff', borderWidth: 1, borderColor: C.borde },
   chipActivo: { backgroundColor: C.texto, borderColor: C.texto },
