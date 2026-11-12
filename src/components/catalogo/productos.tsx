@@ -34,6 +34,8 @@ export function ProductosCatalogo() {
     op.getProductosTabla().then(setLista).catch((err) => avisar('No se pudieron cargar los productos', mensajeError(err)));
   }, []);
   useEffect(cargar, [cargar]);
+  // Colores que ya tienen los productos (también los elegidos en la web), para repetirlos en otro
+  const coloresUsados = useMemo(() => [...new Set((lista ?? []).map((p) => p.color_pos?.toUpperCase()).filter((c): c is string => !!c))], [lista]);
 
   const visibles = useMemo(() => {
     const t = sinTildes(buscar.trim());
@@ -73,12 +75,12 @@ export function ProductosCatalogo() {
           </Pressable>
         )}
       />
-      {formulario && <FormProducto producto={formulario.producto} onCerrar={() => setFormulario(null)} onGuardado={() => { setFormulario(null); cargar(); }} />}
+      {formulario && <FormProducto producto={formulario.producto} usados={coloresUsados} onCerrar={() => setFormulario(null)} onGuardado={() => { setFormulario(null); cargar(); }} />}
     </View>
   );
 }
 
-function FormProducto({ producto, onCerrar, onGuardado }: { producto: op.ProductoEditar | null; onCerrar: () => void; onGuardado: () => void }) {
+function FormProducto({ producto, usados = [], onCerrar, onGuardado }: { producto: op.ProductoEditar | null; usados?: string[]; onCerrar: () => void; onGuardado: () => void }) {
   const { puede } = useSesion();
   // Al crear se fija el precio inicial; cambiarlo después necesita el permiso de precios
   const fijaPrecio = !producto || puede('productos.precios');
@@ -230,8 +232,8 @@ function FormProducto({ producto, onCerrar, onGuardado }: { producto: op.Product
       <Seccion titulo="Botón en el POS" />
       <View style={e.colores}>
         <Pressable onPress={() => cambiar({ color: null })} style={[e.color, { backgroundColor: '#fff' }, !d.color && e.colorActivo]}><Text style={e.suave}>—</Text></Pressable>
-        {COLORES.map((c) => (
-          <Pressable key={c} onPress={() => cambiar({ color: c })} style={[e.color, { backgroundColor: c }, d.color === c && e.colorActivo]} />
+        {[...COLORES, ...usados, ...(d.color ? [d.color.toUpperCase()] : [])].filter((c, i, a) => a.indexOf(c) === i).map((c) => (
+          <Pressable key={c} onPress={() => cambiar({ color: c })} style={[e.color, { backgroundColor: c }, d.color?.toUpperCase() === c && e.colorActivo]} />
         ))}
       </View>
       <Campo etiqueta="Código de barras (opcional)" value={d.codigo_barras} onChangeText={(t) => cambiar({ codigo_barras: t })} maxLength={50} />

@@ -399,6 +399,7 @@ export interface ProductoTabla {
   id: number; sku: string | null; codigo_barras: string | null; nombre: string; clase: string; se_vende: boolean;
   consumo_interno: boolean; controla_stock: boolean; costo_unitario: number | string; precio_venta: number | string;
   stock_actual: number | null; activo: boolean; unidad_abrev: string | null; categorias: string[];
+  color_pos?: string | null;
 }
 
 export interface ProductoEditar {
