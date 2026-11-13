@@ -469,7 +469,8 @@ export default function VentaRapida() {
               <Text style={e.productoPrecio}>{p.consumo_interno ? 'Consumo interno' : dinero(p.precio)}</Text>
               {agotado(p)
                 ? <Text style={[e.suave, { color: C.peligro, fontWeight: '700' }]}>Agotado</Text>
-                : p.controla_stock && verExistencias && <Text style={[e.suave, p.bajo_minimo && { color: C.peligro }]}>{cantidad(p.stock ?? 0)}</Text>}
+                // «Permitir vender sin existencia»: la cantidad no dice nada (queda en negativo a propósito)
+                : p.controla_stock && !p.permite_sin_existencia && verExistencias && <Text style={[e.suave, p.bajo_minimo && { color: C.peligro }]}>{cantidad(p.stock ?? 0)}</Text>}
             </View>
           </Pressable>
         )}

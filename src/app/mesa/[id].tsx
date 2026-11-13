@@ -493,7 +493,8 @@ export default function TerminalMesa() {
                 <Text style={e.productoPrecio}>{dinero(p.precio)}{p.grupos.length > 0 ? ' +' : ''}</Text>
                 {agotado(p)
                   ? <Text style={{ fontSize: 13, color: C.peligro, fontWeight: '700' }}>Agotado</Text>
-                  : verExistencias && p.disponible !== null && p.disponible !== undefined && (
+                  // «Permitir vender sin existencia»: la cantidad no dice nada (queda en negativo a propósito)
+                  : verExistencias && !p.permite_sin_existencia && p.disponible !== null && p.disponible !== undefined && (
                     <Text style={[{ fontSize: 13, color: C.suave }, (p.bajo_minimo || p.disponible <= 0) && { color: C.peligro, fontWeight: '700' }]}>
                       {cantidad(p.disponible)}{p.permite_fraccion && p.unidad ? ` ${p.unidad}` : ''}
                     </Text>
