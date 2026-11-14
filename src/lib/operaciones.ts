@@ -576,7 +576,19 @@ export const guardarImpresora = (datos: ImpresoraDatos, id?: number) =>
   api.post<{ message: string }>(id ? `/admin/impresora/${id}/update` : '/admin/impresora/store', datos);
 export const probarImpresora = (id: number) => api.post<{ success: boolean; message: string }>(`/admin/impresora/${id}/test`, {}, 20000);
 // Comanda de ejemplo (Mesa 1, Ice latte con extras) con el formato de cocina y barra
-export const probarProduccion = (id: number) => api.post<{ success: boolean; message: string }>(`/admin/impresora/${id}/test-produccion`, {}, 20000);
+// Impresiones que no salieron (impresora apagada, sin papel…): se ven, se reintentan o se quitan
+export interface TrabajoImpresion {
+  id: number; tipo: string; tipo_texto: string; impresora_id: number | null; impresora: string | null;
+  estado: 'pendiente' | 'impreso' | 'error'; intentos: number; error: string | null; usuario: string | null; fecha: string;
+}
+export const getTrabajosImpresion = (estado: 'error' | 'pendiente' = 'error') =>
+  api.get<{ trabajos: TrabajoImpresion[]; con_error: number; total: number }>(`/impresion/trabajos?estado=${estado}&per_page=50`);
+export const reintentarTrabajo = (id: number) =>
+  api.post<{ impreso: boolean; en_cola: number; message: string }>(`/impresion/trabajos/${id}/reintentar`, {}, 20000);
+export const quitarTrabajo = (id: number) => api.delete<{ message: string }>(`/impresion/trabajos/${id}`);
+export const quitarTrabajosConError = () => api.delete<{ message: string }>('/impresion/trabajos');
+
+export const probarProduccion = (id: number) =>api.post<{ success: boolean; message: string }>(`/admin/impresora/${id}/test-produccion`, {}, 20000);
 
 // ── Usuarios, roles y permisos ────────────────────────────────
 export interface UsuarioLista { id: number; nombre: string; correo: string; estado: boolean; rol: string; ultimo_acceso: string | null; pin_actualizado_at: string | null }

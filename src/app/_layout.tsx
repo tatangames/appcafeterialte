@@ -41,7 +41,7 @@ function Navegacion() {
   );
 }
 
-// La tablet que imprime revisa la cola cada 3 s y justo después de cada acción
+// Toda tablet con sesión revisa la cola cada 3 s y justo después de cada acción
 function ImpresionLocal() {
   const { usuario } = useSesion();
   const conSesion = !!usuario;

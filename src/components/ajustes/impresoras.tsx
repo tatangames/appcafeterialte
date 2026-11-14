@@ -7,7 +7,7 @@ import { Boton, Campo, Etiqueta, Ventana } from '@/components/ui';
 import { C, radio } from '@/constants/colores';
 import { mensajeError } from '@/lib/api';
 import { avisar } from '@/lib/aviso';
-import { activarImpresionLocal, cargarImpresionLocal, procesarCola, puedeImprimir } from '@/lib/impresionLocal';
+import { procesarCola, puedeImprimir } from '@/lib/impresionLocal';
 import * as op from '@/lib/operaciones';
 
 const USOS = [{ valor: 'ticket', texto: 'Tickets' }, { valor: 'comanda', texto: 'Comandas' }, { valor: 'ambos', texto: 'Ambos' }] as const;
@@ -23,35 +23,120 @@ const conIp = (c: op.Impresora['conexion']) => c === 'red' || c === 'dispositivo
 const describir = (i: op.Impresora) => i.conexion === 'windows' ? `USB · ${i.nombre_windows}`
   : `${i.conexion === 'dispositivo' ? 'Tablet' : 'Red'} · ${i.ip_impresora}:${i.puerto ?? 9100}`;
 
-// Esta tablet manda a la impresora lo que el servidor deja en la cola (impresoras «Desde la tablet»)
-function EstaTabletImprime({ hayDeTablet }: { hayDeTablet: boolean }) {
-  const [activa, setActiva] = useState(false);
+// Las tablets mandan a la impresora lo que el servidor deja en la cola (impresoras «Desde la tablet»).
+// Siempre activo en todas: las tablets del negocio no salen del local.
+function TabletsImprimen({ hayDeTablet }: { hayDeTablet: boolean }) {
   const [ayuda, setAyuda] = useState(false);
-  useEffect(() => { cargarImpresionLocal().then(setActiva); }, []);
+  const [verErrores, setVerErrores] = useState(false);
+  const [conError, setConError] = useState(0);
   const disponible = puedeImprimir();
 
-  const cambiar = async (v: boolean) => {
-    if (v && !disponible) {
-      avisar('Esta versión no puede imprimir', 'Instala el APK de la app (Expo Go y el navegador no pueden conectarse a la impresora).');
-      return;
-    }
-    setActiva(v);
-    await activarImpresionLocal(v);
-  };
+  const contar = useCallback(() => {
+    op.getTrabajosImpresion('error').then((r) => setConError(r.total)).catch(() => null);
+  }, []);
+  useEffect(contar, [contar]);
 
   return (
     <View style={e.tarjeta}>
-      <View style={{ flex: 1 }}>
-        <Interruptor titulo="Esta tablet imprime"
-          detalle={`Manda a la impresora los tickets y comandas de las impresoras «Desde la tablet». Viene encendido; apágalo en una tablet que salga del Wi-Fi del local.${hayDeTablet ? '' : ' Todavía no hay impresoras configuradas así.'}${disponible ? '' : ' (Necesita el APK.)'}`}
-          valor={activa} onCambiar={cambiar} />
+      <View style={{ flex: 1, gap: 6 }}>
+        <Text style={e.titulo}>Las tablets imprimen</Text>
+        <Text style={e.suave}>
+          {disponible
+            ? 'Esta tablet manda a la impresora los tickets y comandas de las impresoras «Desde la tablet», igual que las demás tablets del negocio.'
+            : 'Esta versión no puede imprimir: instala el APK de la app (Expo Go y el navegador no se conectan a la impresora).'}
+          {hayDeTablet ? '' : ' Todavía no hay impresoras configuradas «Desde la tablet».'}
+        </Text>
+        {conError > 0 && (
+          <Pressable onPress={() => setVerErrores(true)} style={e.alerta}>
+            <Text style={e.alertaTexto}>{conError === 1 ? '1 impresión no salió' : `${conError} impresiones no salieron`}</Text>
+            <Text style={[e.alertaTexto, { fontWeight: '800' }]}>Ver y reintentar ›</Text>
+          </Pressable>
+        )}
         <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
           <Boton titulo="¿Cómo funciona?" chico variante="contorno" onPress={() => setAyuda(true)} />
-          {activa && <Boton titulo="Revisar la cola ahora" chico variante="contorno" onPress={() => procesarCola()} />}
+          <Boton titulo="Impresiones con error" chico variante="contorno" onPress={() => setVerErrores(true)} />
         </View>
       </View>
-      <AyudaTabletImprime visible={ayuda} onCerrar={() => setAyuda(false)} />
+      <AyudaTabletsImprimen visible={ayuda} onCerrar={() => setAyuda(false)} />
+      {verErrores && <ImpresionesConError onCerrar={() => { setVerErrores(false); contar(); }} />}
     </View>
+  );
+}
+
+// Lo que no salió (impresora apagada, sin papel, fuera del Wi-Fi): reintentar una o todas, o quitarlas.
+// Al reintentar vuelve a la cola y esta tablet la manda de inmediato; si vuelve a fallar, sigue en la lista.
+function ImpresionesConError({ onCerrar }: { onCerrar: () => void }) {
+  const [lista, setLista] = useState<op.TrabajoImpresion[] | null>(null);
+  const [ocupado, setOcupado] = useState<number | 'todas' | 'quitar' | null>(null);
+
+  const cargar = useCallback(() => {
+    op.getTrabajosImpresion('error').then((r) => setLista(r.trabajos)).catch((err) => avisar('No se pudieron cargar', mensajeError(err)));
+  }, []);
+  useEffect(cargar, [cargar]);
+
+  // Devuelve a la cola, la manda ya (si es «Desde la tablet») y recarga para ver qué sigue fallando
+  const reintentar = async (ids: number[], clave: number | 'todas') => {
+    setOcupado(clave);
+    const fallos: string[] = [];
+    for (const id of ids) {
+      try {
+        const r = await op.reintentarTrabajo(id);
+        if (!r.impreso && !r.en_cola) fallos.push(r.message);
+      } catch (err) {
+        fallos.push(mensajeError(err));
+      }
+    }
+    await procesarCola({ silencioso: true });
+    const r = await op.getTrabajosImpresion('error').catch(() => null);
+    const siguen = r ? r.trabajos.filter((t) => ids.includes(t.id)).length : 0;
+    if (r) setLista(r.trabajos);
+    setOcupado(null);
+    if (fallos.length || siguen) {
+      avisar(siguen ? `${siguen === 1 ? 'Sigue sin salir' : `${siguen} siguen sin salir`}` : 'No se pudo reintentar',
+        [...new Set(fallos)].join('\n') || 'Revisa que la impresora esté encendida, con papel y en el mismo Wi-Fi.');
+    } else {
+      avisar(ids.length === 1 ? 'Impresión enviada' : `${ids.length} impresiones enviadas`);
+    }
+  };
+
+  const quitar = async (id?: number) => {
+    setOcupado(id ?? 'quitar');
+    try {
+      const r = await (id ? op.quitarTrabajo(id) : op.quitarTrabajosConError());
+      avisar(r.message);
+      cargar();
+    } catch (err) {
+      avisar('No se pudo quitar', mensajeError(err));
+    } finally {
+      setOcupado(null);
+    }
+  };
+
+  const ids = (lista ?? []).map((t) => t.id);
+  return (
+    <Ventana visible titulo="Impresiones con error" subtitulo="Lo que no salió en la impresora" onCerrar={onCerrar} ancho={680}
+      pie={ids.length > 0 ? (
+        <View style={{ flexDirection: 'row', gap: 8, flex: 1 }}>
+          <View style={{ flex: 1 }}><Boton titulo="Quitar todas" variante="contorno" cargando={ocupado === 'quitar'} deshabilitado={!!ocupado} onPress={() => quitar()} /></View>
+          <View style={{ flex: 2 }}><Boton titulo={`Reintentar todas (${ids.length})`} cargando={ocupado === 'todas'} deshabilitado={!!ocupado} onPress={() => reintentar(ids, 'todas')} /></View>
+        </View>
+      ) : undefined}>
+      {lista === null && <Text style={e.vacio}>Cargando…</Text>}
+      {lista?.length === 0 && <Text style={e.vacio}>Todo salió bien: no hay impresiones con error.</Text>}
+      {(lista ?? []).map((t) => (
+        <View key={t.id} style={[e.tarjeta, { alignItems: 'flex-start' }]}>
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text style={e.titulo}>{t.tipo_texto}</Text>
+            <Text style={e.suave}>{t.impresora ?? 'Sin impresora'} · {t.fecha}{t.usuario ? ` · ${t.usuario}` : ''}</Text>
+            {t.error && <Text style={{ fontSize: 13, color: C.peligro }}>{t.error}</Text>}
+          </View>
+          <View style={{ gap: 6 }}>
+            <Boton titulo="Reintentar" chico cargando={ocupado === t.id} deshabilitado={!!ocupado} onPress={() => reintentar([t.id], t.id)} />
+            <Boton titulo="Quitar" chico variante="contorno" deshabilitado={!!ocupado} onPress={() => quitar(t.id)} />
+          </View>
+        </View>
+      ))}
+    </Ventana>
   );
 }
 
@@ -59,12 +144,12 @@ const AYUDA: { titulo: string; texto: string }[] = [
   {
     titulo: '¿Para qué sirve?',
     texto: 'El servidor está en internet y no puede llegar a las impresoras del local. Cuando se cobra o se manda una comanda, '
-      + 'el servidor deja el ticket en una cola. La tablet que tiene esto activado lo toma (cada 3 segundos) y lo manda '
+      + 'el servidor deja el ticket en una cola. Las tablets la revisan cada 3 segundos y la primera que lo toma lo manda '
       + 'por el Wi-Fi a la impresora. Solo aplica a las impresoras con conexión «Desde la tablet (Wi-Fi)».',
   },
   {
-    titulo: '¿Hay que activarlo?',
-    texto: 'Viene encendido en todas las tablets. Basta con una encendida para que se imprima todo (también lo que se cobra '
+    titulo: '¿Hay que activar algo?',
+    texto: 'No: todas las tablets imprimen solas. Basta con una abierta para que se imprima todo (también lo que se cobra '
       + 'desde la web o desde otras tablets); con dos o más, si una se apaga, las demás siguen imprimiendo.',
   },
   {
@@ -72,31 +157,25 @@ const AYUDA: { titulo: string; texto: string }[] = [
     texto: 'No: cada ticket o comanda lo toma una sola tablet, la primera que revisa la cola.',
   },
   {
-    titulo: 'Cuándo apagarlo',
-    texto: 'En una tablet que salga del Wi-Fi del local (por ejemplo, si alguien se la lleva a casa con la app abierta): '
-      + 'podría tomar un ticket, no alcanzar la impresora y ese ticket quedaría con error, sin imprimirse. Se reimprime '
-      + 'desde el ticket o la comanda.',
-  },
-  {
     titulo: 'Qué necesita la tablet',
     texto: 'Estar conectada al Wi-Fi del local, con la app abierta y la sesión iniciada (con la app cerrada o la pantalla '
-      + 'bloqueada mucho rato no imprime). Tener instalado el APK; Expo Go y el navegador no pueden imprimir.',
+      + 'bloqueada mucho rato no imprime). Tener instalado el APK; Expo Go y el navegador no pueden imprimir. '
+      + 'Una tablet fuera del local no alcanza la impresora: lo que tome queda con error y se reimprime desde el ticket o la comanda.',
   },
   {
     titulo: 'Sin internet',
-    texto: 'Las ventas que se hacen sin conexión las imprime la misma tablet que vende, directo a la impresora, tenga o no '
-      + 'activada esta opción.',
+    texto: 'Las ventas que se hacen sin conexión las imprime la misma tablet que vende, directo a la impresora.',
   },
   {
     titulo: 'Si no imprime',
-    texto: 'Revisa que la tablet con esto activado esté abierta y en el Wi-Fi, y usa «Imprimir prueba» en la impresora. '
+    texto: 'Revisa que haya una tablet abierta y en el Wi-Fi, y usa «Imprimir prueba» en la impresora. '
       + '«Revisar la cola ahora» manda de inmediato lo que esté pendiente. Lo que lleva más de 30 minutos en cola ya no se imprime.',
   },
 ];
 
-function AyudaTabletImprime({ visible, onCerrar }: { visible: boolean; onCerrar: () => void }) {
+function AyudaTabletsImprimen({ visible, onCerrar }: { visible: boolean; onCerrar: () => void }) {
   return (
-    <Ventana visible={visible} titulo="Esta tablet imprime" subtitulo="Cómo funciona" onCerrar={onCerrar} ancho={620}
+    <Ventana visible={visible} titulo="Las tablets imprimen" subtitulo="Cómo funciona" onCerrar={onCerrar} ancho={620}
       pie={<Boton titulo="Entendido" onPress={onCerrar} />}>
       {AYUDA.map((a) => (
         <View key={a.titulo} style={{ gap: 4 }}>
@@ -123,7 +202,7 @@ export function Impresoras() {
     try {
       const r = await (produccion ? op.probarProduccion(i.id) : op.probarImpresora(i.id));
       avisar(r.success ? (i.conexion === 'dispositivo' ? `${i.alias}: prueba enviada` : `${i.alias}: impresa la prueba`) : `${i.alias} no imprimió`,
-        r.success ? (i.conexion === 'dispositivo' ? 'La imprime la tablet que tiene activado «Esta tablet imprime».' : undefined) : r.message);
+        r.success ? (i.conexion === 'dispositivo' ? 'La imprime la primera tablet del local que revise la cola.' : undefined) : r.message);
     } catch (err) {
       avisar(`${i.alias} no imprimió`, mensajeError(err));
     } finally {
@@ -137,7 +216,7 @@ export function Impresoras() {
         <Text style={[e.suave, { flex: 1 }]}>Con el servidor en la nube usa «Desde la tablet»: la tablet del local manda el ticket a la IP de la impresora (puerto 9100). «Desde el servidor» y «USB» solo sirven si el servidor está en el local.</Text>
         <Boton titulo="+ Impresora" onPress={() => setEditando({ item: null })} />
       </View>
-      <EstaTabletImprime hayDeTablet={(lista ?? []).some((i) => i.conexion === 'dispositivo')} />
+      <TabletsImprimen hayDeTablet={(lista ?? []).some((i) => i.conexion === 'dispositivo')} />
       {lista?.length === 0 && <Text style={e.vacio}>No hay impresoras. Agrega la del mostrador y la de la cocina.</Text>}
       {(lista ?? []).map((i) => (
         <View key={i.id} style={[e.tarjeta, !i.activo && { opacity: 0.5 }]}>
@@ -232,4 +311,6 @@ const e = StyleSheet.create({
   titulo: { fontSize: 16, fontWeight: '800', color: C.texto },
   suave: { fontSize: 13, color: C.suave },
   ayuda: { fontSize: 14, color: C.texto, lineHeight: 20 },
+  alerta: { flexDirection: 'row', justifyContent: 'space-between', gap: 8, backgroundColor: '#FEF2F2', borderWidth: 1, borderColor: '#FECACA', borderRadius: radio, padding: 10 },
+  alertaTexto: { fontSize: 14, color: '#991B1B' },
 });
