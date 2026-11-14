@@ -26,6 +26,7 @@ const describir = (i: op.Impresora) => i.conexion === 'windows' ? `USB · ${i.no
 // Esta tablet manda a la impresora lo que el servidor deja en la cola (impresoras «Desde la tablet»)
 function EstaTabletImprime({ hayDeTablet }: { hayDeTablet: boolean }) {
   const [activa, setActiva] = useState(false);
+  const [ayuda, setAyuda] = useState(false);
   useEffect(() => { cargarImpresionLocal().then(setActiva); }, []);
   const disponible = puedeImprimir();
 
@@ -42,11 +43,68 @@ function EstaTabletImprime({ hayDeTablet }: { hayDeTablet: boolean }) {
     <View style={e.tarjeta}>
       <View style={{ flex: 1 }}>
         <Interruptor titulo="Esta tablet imprime"
-          detalle={`Manda a la impresora los tickets y comandas de las impresoras «Desde la tablet». Actívalo solo en la tablet que está en el Wi-Fi del local.${hayDeTablet ? '' : ' Todavía no hay impresoras configuradas así.'}${disponible ? '' : ' (Necesita el APK.)'}`}
+          detalle={`Manda a la impresora los tickets y comandas de las impresoras «Desde la tablet». Viene encendido; apágalo en una tablet que salga del Wi-Fi del local.${hayDeTablet ? '' : ' Todavía no hay impresoras configuradas así.'}${disponible ? '' : ' (Necesita el APK.)'}`}
           valor={activa} onCambiar={cambiar} />
-        {activa && <Boton titulo="Revisar la cola ahora" chico variante="contorno" onPress={() => procesarCola()} />}
+        <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+          <Boton titulo="¿Cómo funciona?" chico variante="contorno" onPress={() => setAyuda(true)} />
+          {activa && <Boton titulo="Revisar la cola ahora" chico variante="contorno" onPress={() => procesarCola()} />}
+        </View>
       </View>
+      <AyudaTabletImprime visible={ayuda} onCerrar={() => setAyuda(false)} />
     </View>
+  );
+}
+
+const AYUDA: { titulo: string; texto: string }[] = [
+  {
+    titulo: '¿Para qué sirve?',
+    texto: 'El servidor está en internet y no puede llegar a las impresoras del local. Cuando se cobra o se manda una comanda, '
+      + 'el servidor deja el ticket en una cola. La tablet que tiene esto activado lo toma (cada 3 segundos) y lo manda '
+      + 'por el Wi-Fi a la impresora. Solo aplica a las impresoras con conexión «Desde la tablet (Wi-Fi)».',
+  },
+  {
+    titulo: '¿Hay que activarlo?',
+    texto: 'Viene encendido en todas las tablets. Basta con una encendida para que se imprima todo (también lo que se cobra '
+      + 'desde la web o desde otras tablets); con dos o más, si una se apaga, las demás siguen imprimiendo.',
+  },
+  {
+    titulo: '¿Sale doble con varias tablets?',
+    texto: 'No: cada ticket o comanda lo toma una sola tablet, la primera que revisa la cola.',
+  },
+  {
+    titulo: 'Cuándo apagarlo',
+    texto: 'En una tablet que salga del Wi-Fi del local (por ejemplo, si alguien se la lleva a casa con la app abierta): '
+      + 'podría tomar un ticket, no alcanzar la impresora y ese ticket quedaría con error, sin imprimirse. Se reimprime '
+      + 'desde el ticket o la comanda.',
+  },
+  {
+    titulo: 'Qué necesita la tablet',
+    texto: 'Estar conectada al Wi-Fi del local, con la app abierta y la sesión iniciada (con la app cerrada o la pantalla '
+      + 'bloqueada mucho rato no imprime). Tener instalado el APK; Expo Go y el navegador no pueden imprimir.',
+  },
+  {
+    titulo: 'Sin internet',
+    texto: 'Las ventas que se hacen sin conexión las imprime la misma tablet que vende, directo a la impresora, tenga o no '
+      + 'activada esta opción.',
+  },
+  {
+    titulo: 'Si no imprime',
+    texto: 'Revisa que la tablet con esto activado esté abierta y en el Wi-Fi, y usa «Imprimir prueba» en la impresora. '
+      + '«Revisar la cola ahora» manda de inmediato lo que esté pendiente. Lo que lleva más de 30 minutos en cola ya no se imprime.',
+  },
+];
+
+function AyudaTabletImprime({ visible, onCerrar }: { visible: boolean; onCerrar: () => void }) {
+  return (
+    <Ventana visible={visible} titulo="Esta tablet imprime" subtitulo="Cómo funciona" onCerrar={onCerrar} ancho={620}
+      pie={<Boton titulo="Entendido" onPress={onCerrar} />}>
+      {AYUDA.map((a) => (
+        <View key={a.titulo} style={{ gap: 4 }}>
+          <Text style={e.titulo}>{a.titulo}</Text>
+          <Text style={e.ayuda}>{a.texto}</Text>
+        </View>
+      ))}
+    </Ventana>
   );
 }
 
@@ -173,4 +231,5 @@ const e = StyleSheet.create({
   tarjeta: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#fff', borderRadius: radio, borderWidth: 1, borderColor: C.borde, padding: 14 },
   titulo: { fontSize: 16, fontWeight: '800', color: C.texto },
   suave: { fontSize: 13, color: C.suave },
+  ayuda: { fontSize: 14, color: C.texto, lineHeight: 20 },
 });

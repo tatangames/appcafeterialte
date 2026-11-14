@@ -27,13 +27,14 @@ export const puedeImprimir = (): boolean => !!impresoraTcp;
 
 export async function cargarImpresionLocal(): Promise<boolean> {
   const [a, d] = await Promise.all([leer(K.activa), leer(K.dispositivo)]);
-  activa = a === '1';
+  // Encendida por defecto: solo queda apagada si alguien la apagó en esta tablet
+  activa = a !== '0';
   dispositivo = d ?? '';
   if (!dispositivo) {
     dispositivo = `tablet-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     await guardar(K.dispositivo, dispositivo);
   }
-  return activa;
+  return activa && puedeImprimir();
 }
 
 export const impresionLocalActiva = () => activa;
